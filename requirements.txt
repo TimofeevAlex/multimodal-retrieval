@@ -1,0 +1,5 @@
+transformers==3.0.2
+pycocotools
+torch
+torchvision
+numpy

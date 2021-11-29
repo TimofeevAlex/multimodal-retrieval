@@ -1,8 +1,10 @@
 import torch
-from tqdm import tqdm
 from torch import cuda
-device = 'cuda' if cuda.is_available() else 'cpu'
+from tqdm import tqdm
+
+device = "cuda" if cuda.is_available() else "cpu"
 # max_len = data_qoutations.quotation.str.split().str.len().max()
+
 
 def train_one_epoch(epoch, image_embedder, text_embedder, loss_fn, loader, optimizer):
     image_embedder.train()
@@ -11,10 +13,10 @@ def train_one_epoch(epoch, image_embedder, text_embedder, loss_fn, loader, optim
     for data in tqdm(loader):
         optimizer.zero_grad()
         # Extract positive captions
-        ids = data['ids'].to(device, dtype = torch.long)
-        masks = data['mask'].to(device, dtype = torch.long)
+        ids = data["ids"].to(device, dtype=torch.long)
+        masks = data["mask"].to(device, dtype=torch.long)
         # Extract images
-        input_images = data['image'].to(device, dtype = torch.float)
+        input_images = data["image"].to(device, dtype=torch.float)
         # Compute embeddings for images and texts
         image_embeds = image_embedder(input_images)
         text_embeds = text_embedder(ids, masks)
