@@ -3,3 +3,4 @@ pycocotools
 torch
 torchvision
 numpy
+tensorboard

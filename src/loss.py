@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import cuda, nn
 
-device = "cuda" if cuda.is_available() else "cpu"
+# device = "cuda" if cuda.is_available() else "cpu"
 
 
 class HingeTripletRankingLoss(nn.Module):
@@ -25,7 +25,7 @@ class HingeTripletRankingLoss(nn.Module):
 
     def forward(self, image_embeds, text_embeds):
         batch_size = image_embeds.shape[0]
-        mask = torch.eye(batch_size).bool().to(device)
+        mask = torch.eye(batch_size).bool().to(self.device)
 
         image_embeds_norm = F.normalize(image_embeds, dim=1)
         text_embeds_norm = F.normalize(text_embeds, dim=1)
@@ -48,7 +48,7 @@ class SimCLRLoss(nn.Module):
 
     def forward(self, image_embeds, text_embeds):
         batch_size = image_embeds.shape[0]
-        mask = torch.eye(batch_size).bool().to(device)
+        mask = torch.eye(batch_size).bool().to(self.device)
 
         image_embeds_norm = F.normalize(image_embeds, dim=1)
         text_embeds_norm = F.normalize(text_embeds, dim=1)
@@ -58,8 +58,8 @@ class SimCLRLoss(nn.Module):
 
         pos_sim = sim_matrix.diag()
         neg_sim = sim_matrix * (
-            torch.ones(batch_size, batch_size).to(device)
-            - torch.eye(batch_size, batch_size).to(device)
+            torch.ones(batch_size, batch_size).to(self.device)
+            - torch.eye(batch_size, batch_size).to(self.device)
         )
 
         image_term = torch.log(pos_sim / neg_sim.sum(0))
