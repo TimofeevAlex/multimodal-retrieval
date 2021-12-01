@@ -37,7 +37,9 @@ class ImgCaptSetLoader(Dataset):
 
     def __getitem__(self, index):
         # We are loading only a single caption to enable easier batch negative sampling
-        img, captions = self.coco_dataset[index]  # loading pair image - one caption (should they be shuffled here)?
+        img, captions = self.coco_dataset[
+            index
+        ]  # loading pair image - one caption (should they be shuffled here)?
         inputs = [
             self.tokenizer.encode_plus(
                 c,  # fetching the single caption
@@ -71,9 +73,11 @@ class ImgCaptLoader(Dataset):
 
     def __getitem__(self, index):
         # We are loading only a single caption to enable easier batch negative sampling
-        img, captions = self.coco_dataset[index]  # loading pair image - one caption (should they be shuffled here)?
+        img, captions = self.coco_dataset[
+            index
+        ]  # loading pair image - one caption (should they be shuffled here)?
         inputs = self.tokenizer.encode_plus(
-            captions[random.randrange(0, 5)],  # fetching the single caption
+            captions[0],  # fetching the single caption
             None,
             add_special_tokens=True,
             max_length=self.max_len,

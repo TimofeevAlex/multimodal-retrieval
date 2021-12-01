@@ -10,11 +10,11 @@ class AverageMeter(object):
         self.sum = 0
         self.count = 0
 
-    def update(self, val, n=0):
+    def update(self, val):
         self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / (.0001 + self.count)
+        self.sum += val
+        self.count += 1
+        self.avg = self.sum / (0.0001 + self.count)
 
     def __str__(self):
         """
@@ -24,12 +24,13 @@ class AverageMeter(object):
         if self.count == 0:
             return str(self.val)
         # for stats
-        return '%.4f (%.4f)' % (self.val, self.avg)
+        return "%.4f (%.4f)" % (self.val, self.avg)
+
 
 # can be moved to another class
 def create_dict_meters(ks):
     metric_names = (
-        ['loss', 'mr_i2t', 'mr_t2i'] + [f'r@{k}_i2t' for k in ks] + [f'r@{k}_t2i' for k in ks]
-    ) 
-    metrics = {name:AverageMeter() for name in metric_names}
+        ["mr_i2t", "mr_t2i"] + [f"r@{k}_i2t" for k in ks] + [f"r@{k}_t2i" for k in ks]
+    )
+    metrics = {name: AverageMeter() for name in metric_names}
     return metrics

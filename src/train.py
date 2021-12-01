@@ -1,20 +1,21 @@
 import torch
-from torch import cuda
-from tqdm import tqdm
-from src.eval import compute_ranks, recall_k
 from src.utils import AverageMeter
+from time import time
 
 # device = "cuda" if cuda.is_available() else "cpu"
 # max_len = data_qoutations.quotation.str.split().str.len().max()
 
 
-def train_one_epoch(epoch, image_embedder, text_embedder, loss_fn, loader, optimizer, device):
+def train_one_epoch(
+    epoch, image_embedder, text_embedder, loss_fn, loader, optimizer, device
+):
     image_embedder.train()
     text_embedder.train()
-    # ks = [1]
-    # metrics = create_dict_meters(ks)
     loss_meter = AverageMeter()
-    for data in loader:
+    time_meter = AverageMeter()
+    len_ = len(loader)
+    start = time()
+    for idx, data in enumerate(loader):
         optimizer.zero_grad()
         # Extract positive captions
         ids = data["ids"].to(device, dtype=torch.long)
@@ -30,14 +31,19 @@ def train_one_epoch(epoch, image_embedder, text_embedder, loss_fn, loader, optim
         # Backward
         loss.backward()
         optimizer.step()
-        # # Metrics
-        # image_ranks, text_ranks = compute_ranks(image_embeds, text_embeds, device)
-        # metrics['mr_t2i'].update(torch.mean(torch.Tensor.float(text_ranks)))
-        # metrics['mr_i2t'].update(torch.mean(torch.Tensor.float(image_ranks)))
-        # for k in ks:
-        #     image_recall, text_recall = recall_k(k, image_ranks, text_ranks)
-        #     metrics[f'r@{k}_t2i'].update(image_recall)
-        #     metrics[f'r@{k}_i2t'].update(text_recall)
-
-    print('TRAIN Epoch {} | Loss {%.3f}'.format(epoch, loss_meter.avg))
+        # Time measurement and print
+        curr_iter = time() - start
+        time_meter.update(curr_iter)
+        print(
+            "TRAIN Epoch {} [{}] | Loss {:.3f} ({:.3f}) | {:.2f}/{:.2f} [{:.2f} s/it]".format(
+                epoch,
+                idx,
+                loss_meter.val,
+                loss_meter.avg,
+                time_meter.sum,
+                time_meter.avg * len_,
+                time_meter.avg,
+            )
+        )
+        start += curr_iter
     return loss_meter.avg

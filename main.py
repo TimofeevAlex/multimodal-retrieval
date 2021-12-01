@@ -9,8 +9,9 @@ import torchvision.datasets as dset
 from src import eval, loader, loss, model, train
 from torch import cuda
 from torch.utils.data import DataLoader
-from transformers import DistilBertTokenizer
+from transformers import DistilBertTokenizerFast
 from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import MultiStepLR
 
 device = "cuda" if cuda.is_available() else "cpu"
 
@@ -25,7 +26,7 @@ def run_train(
     LOSS,
     writer,
 ):
-    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
     # Define train loader
     tr_dataset = dset.CocoCaptions(
@@ -33,11 +34,13 @@ def run_train(
         annFile=osp.join(DATA_DIRECTORY, annot_train),
         transform=loader.get_transform("train"),
     )
-
     params = {"batch_size": BATCH_SIZE, "shuffle": False}
     train_dataset = loader.ImgCaptLoader(tr_dataset, tokenizer, MAX_LEN)
-    train_size = len(train_dataset) - 5000
-    train_dataset = torch.utils.data.Subset(train_dataset, torch.arange(train_size))
+    len_ = len(train_dataset)
+    train_size = len_ - 5000
+    train_dataset = torch.utils.data.Subset(
+        train_dataset, torch.arange(1280)
+    )  # train_size
     train_loader = DataLoader(train_dataset, **params)
     # Define val loader
     val_dataset = dset.CocoCaptions(
@@ -45,14 +48,14 @@ def run_train(
         annFile=osp.join(DATA_DIRECTORY, annot_train),
         transform=loader.get_transform("val"),
     )
-    val_dataset = loader.ImgCaptSetLoader(val_dataset, tokenizer, MAX_LEN)
-    val_indices = torch.arange(train_size, len(train_dataset))
-    val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
+    val_dataset = loader.ImgCaptLoader(val_dataset, tokenizer, MAX_LEN)
+    val_indices = torch.arange(train_size, len_)
+    val_dataset = torch.utils.data.Subset(val_dataset, torch.arange(1280))
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    text_embedder = model.DistilBERT(finetune=True, embedding_size=512).to(device)
-    image_embedder = model.ResNet34(finetune=False).to(device)
+    text_embedder = model.DistilBERT(finetune="all", embedding_size=512).to(device)
+    image_embedder = model.ResNet34().to(device)
 
     # Define loss function
     if LOSS == "triplet":
@@ -68,24 +71,49 @@ def run_train(
     params += list(filter(lambda p: p.requires_grad, text_embedder.parameters()))
 
     optimizer = torch.optim.Adam(params=params, lr=LEARNING_RATE)
-    print('Start training')
+    scheduler = MultiStepLR(optimizer, milestones=[15], gamma=0.1)
+
+    create_dir(OUTPUT_DIRECTORY)
+    models_dir = osp.join(
+        OUTPUT_DIRECTORY,
+        str(datetime.now()).split(".")[0].replace(" ", "_")
+        + f"_{LOSS}_{LEARNING_RATE}",
+    )
+    create_dir(models_dir)
+
+    print("Start training")
     for epoch in range(EPOCHS):
+        # train one epoch
         loss_tr = train.train_one_epoch(
-            epoch, image_embedder, text_embedder, loss_fn, train_loader, optimizer, device
+            epoch,
+            image_embedder,
+            text_embedder,
+            loss_fn,
+            train_loader,
+            optimizer,
+            device,
         )
         # Add loss to tensorboard
-        writer.add_scalar('loss/train', loss_tr, epoch)
-        if epoch % 5 == 0:
-            val_metrics = eval.evaluate(
-                image_embedder, text_embedder, loss_fn, val_loader, [1, 5, 10], device, epoch
-            )
-            # Add metrics to tensorboard
-            for name in val_metrics:
-                writer.add_scalar(name + '/val', val_metrics[name], epoch)
+        writer.add_scalar("loss/train", loss_tr, epoch)
+        # if epoch % 1 == 0:
+        # validate one epoch
+        loss_val = eval.evaluate(
+            image_embedder,
+            text_embedder,
+            val_loader,
+            loss_fn,
+            [1, 5, 10],
+            device,
+            epoch,
+        )
+        # Add metrics to tensorboard
+        writer.add_scalar("loss/val", loss_val, epoch)
+        scheduler.step()
+        # Save the model
+        torch.save(
+            text_embedder.state_dict(), osp.join(models_dir, f"text_embedder_{epoch}")
+        )
 
-    torch.save(text_embedder.state_dict(), osp.join(OUTPUT_DIRECTORY, "text_embedder"))
-    torch.save(image_embedder.state_dict(), osp.join(OUTPUT_DIRECTORY, "image_embedder")
-    )
     return image_embedder, text_embedder
 
 
@@ -97,34 +125,34 @@ def run_test(
     cap_file = osp.join(DATA_DIRECTORY, annot_val)
 
     print("Running evaluations")
-    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     test_dataset = dset.CocoCaptions(
         root=im_dir, annFile=cap_file, transform=loader.get_transform("test")
     )
     test_dataset = loader.ImgCaptSetLoader(test_dataset, tokenizer, MAX_LEN)
-    test_dataset = torch.utils.data.Subset(test_dataset, torch.arange(5000))
+    test_dataset = torch.utils.data.Subset(test_dataset, torch.arange(1280))
     test_params = {"batch_size": BATCH_SIZE, "shuffle": False}
     test_loader = DataLoader(test_dataset, **test_params)
 
     if LOSS == "triplet":
-            loss_fn = loss.HingeTripletRankingLoss(
+        loss_fn = loss.HingeTripletRankingLoss(
             margin=0.2, device=device, mining_negatives="max"
         ).to(device)
     elif LOSS == "SimCLR":
         loss_fn = loss.SimCLRLoss(temp=0.07, device=device).to(device)
     else:
         raise ValueError("Loss can be triplet/SimCLR")
-    
-    eval.evaluate(image_embedder, text_embedder, loss_fn, test_loader, [1, 5, 10], device)
+
+    eval.evaluate(
+        image_embedder, text_embedder, test_loader, loss_fn, [1, 5, 10], device
+    )
 
 
-def read_embedders(input_directory):
+def read_embedders(path):
     print("Loading models from input directory")
-    text_embedder = model.DistilBERT(finetune=True, embedding_size=512).to(device)
-    image_embedder = model.ResNet34(finetune=False).to(device)
-    text_embedder.load_state_dict(torch.load(input_directory + "text_embedder"))
-    image_embedder.load_state_dict(torch.load(input_directory + "image_embedder"))
-    return image_embedder, text_embedder
+    text_embedder = model.DistilBERT(finetune="all", embedding_size=512).to(device)
+    text_embedder.load_state_dict(torch.load(path))
+    return text_embedder
 
 
 def str2bool(v):
@@ -134,6 +162,13 @@ def str2bool(v):
         return False
     else:
         raise ValueError("Boolean value expected.")
+
+
+def create_dir(path):
+    try:
+        os.mkdir(path)
+    except:
+        pass
 
 
 def main() -> None:
@@ -149,13 +184,13 @@ def main() -> None:
 
     parser.add_argument("--DATA_DIRECTORY", type=str, default="dataset")
 
-    parser.add_argument("--MAX_LEN", type=int, default=512)
+    parser.add_argument("--MAX_LEN", type=int, default=32)
 
-    parser.add_argument("--EPOCHS", type=int, default=64)
+    parser.add_argument("--EPOCHS", type=int, default=30)
 
-    parser.add_argument("--LEARNING_RATE", type=float, default=1e-4)
-    
-    parser.add_argument("--BATCH_SIZE", type=int, default=128)
+    parser.add_argument("--LEARNING_RATE", type=float, default=2e-4)
+
+    parser.add_argument("--BATCH_SIZE", type=int, default=256)
 
     parser.add_argument("--OUTPUT_DIRECTORY", type=str, default="model")
 
@@ -171,10 +206,7 @@ def main() -> None:
         from zipfile import ZipFile
 
         # create a dir for the dataset
-        try:
-            os.mkdir(options.DATA_DIRECTORY)
-        except:
-            pass
+        create_dir(options.DATA_DIRECTORY)
         # download files
         files = [
             "train2014.zip",
@@ -197,17 +229,13 @@ def main() -> None:
             print(f"\nUnzipping {to_save}")
             with ZipFile(to_save, "r") as zip_obj:
                 zip_obj.extractall(options.DATA_DIRECTORY)
-    
-    # Create a writer for tensorboard
-    now = str(datetime.now()).split('.')[0]
-    exp_name = f"{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
-    log_dir = 'logs'
-    try:
-        os.mkdir(log_dir)
-    except:
-        pass
-    writer = SummaryWriter(osp.join(log_dir, exp_name))
 
+    # Create a writer for tensorboard
+    now = str(datetime.now()).split(".")[0].replace(" ", "_")
+    exp_name = f"{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
+    log_dir = "logs"
+    create_dir(log_dir)
+    writer = SummaryWriter(osp.join(log_dir, exp_name))
     # Run training
     if options.INPUT_DIRECTORY == "":
         image_embedder, text_embedder = run_train(
@@ -218,7 +246,7 @@ def main() -> None:
             options.LEARNING_RATE,
             options.OUTPUT_DIRECTORY,
             options.LOSS,
-            writer
+            writer,
         )
     else:
         image_embedder, text_embedder = read_embedders(options.INPUT_DIRECTORY)
@@ -231,7 +259,7 @@ def main() -> None:
         options.LOSS,
         image_embedder,
         text_embedder,
-        writer
+        writer,
     )
     writer.close()
 

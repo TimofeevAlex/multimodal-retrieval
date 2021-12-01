@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
-from tqdm import tqdm
-from src.utils import create_dict_meters
+from time import time
+from src.utils import create_dict_meters, AverageMeter
 
 
 def compute_ranks(image_embeds, text_embeds):
@@ -14,12 +14,12 @@ def compute_ranks(image_embeds, text_embeds):
     text_inds = torch.argsort(sim_matrix.T, -1)
 
     image_ranks = [
-        (image_inds[i] == i).nonzero().flatten() for i in range(image_inds.shape[0])
+        torch.nonzero(image_inds[i] == i).flatten() for i in range(image_inds.shape[0])
     ]
     image_ranks = torch.stack(image_ranks)
 
     text_ranks = [
-        (text_inds[i] == i // 5).nonzero().flatten() for i in range(text_inds.shape[0])
+        torch.nonzero(text_inds[i] == i // 5).flatten() for i in range(text_inds.shape[0])
     ]
     text_ranks = torch.stack(text_ranks)
 
@@ -33,48 +33,76 @@ def recall_k(k, image_ranks, text_ranks):
 
 
 def evaluate(image_embedder, text_embedder, loader, loss_fn, ks, device, epoch=None):
-    # We will do validation on all five captions
+    # We will do test on all five captions
     image_embedder.eval()
     text_embedder.eval()
-    metrics = create_dict_meters(ks)
+    if epoch == None:
+        metrics = create_dict_meters(ks)
+    else:
+        loss_meter = AverageMeter()
+    time_meter = AverageMeter()
+    len_ = len(loader)
+    start = time()
     with torch.no_grad():
-        for idx, data in enumerate(loader, 0):
+        for idx, data in enumerate(loader):
             # Extract positive captions
             ids = data["ids"].to(device, dtype=torch.long)
-            ids = torch.flatten(ids, 0, 1)
             masks = data["mask"].to(device, dtype=torch.long)
-            masks = torch.flatten(masks, 0, 1)
+            if epoch == None:
+                ids = torch.flatten(ids, 0, 1)
+                masks = torch.flatten(masks, 0, 1)
+
             # Extract images
             input_images = data["image"].to(device, dtype=torch.float)
+
             # Compute embeddings for images and texts
             image_embeds = image_embedder(input_images)
             text_embeds = text_embedder(ids, masks)
 
-            loss = loss_fn(image_embeds, text_embeds)
-            metrics['loss'].update(loss.item())
+            if epoch == None:
+                image_ranks, text_ranks = compute_ranks(
+                    image_embeds, text_embeds
+                )
+                metrics["mr_t2i"].update(torch.mean(torch.Tensor.float(text_ranks)))
+                metrics["mr_i2t"].update(torch.mean(torch.Tensor.float(image_ranks)))
+                for k in ks:
+                    image_recall, text_recall = recall_k(k, image_ranks, text_ranks)
+                    metrics[f"r@{k}_t2i"].update(image_recall)
+                    metrics[f"r@{k}_i2t"].update(text_recall)
+            else:
+                loss = loss_fn(image_embeds, text_embeds)
+                loss_meter.update(loss.item())
 
-            image_ranks, text_ranks = compute_ranks(image_embeds, text_embeds, device)
-            metrics['mr_t2i'].update(torch.mean(torch.Tensor.float(text_ranks)))
-            metrics['mr_i2t'].update(torch.mean(torch.Tensor.float(image_ranks)))
-            # print(
-            #     "Batch {} mean rank Text2Image {} Image2Text {}\n".format(
-            #         idx,
-            #         metrics['mr_t2i'].val,
-            #         metrics['mr_i2t'].val,
-            #     )
-            # )
-            for k in ks:
-                image_recall, text_recall = recall_k(k, image_ranks, text_ranks)
-                metrics[f'r@{k}_t2i'].update(image_recall)
-                metrics[f'r@{k}_i2t'].update(text_recall)
-                # print(
-                #     "Batch {} Recall @ {} Text2Image {} Image2Text {}\n".format(
-                #         idx, k, image_recall, text_recall
-                #     )
-                # )
-    final_metrics = ' | '.join(['{}: {%.2f}'.format(name, metrics[name].avg) for name in metrics])
+            curr_iter = time() - start
+            time_meter.update(time() - start)
+            if epoch == None:
+                print(
+                    "TEST Batch [{}] | {:.2f}/{:.2f} [{:.2f} s/it]".format(
+                        idx,
+                        time_meter.sum,
+                        time_meter.avg * len_,
+                        time_meter.avg,
+                    )
+                )
+            else:
+                print(
+                    "VAL Epoch {} [{}] | Loss {:.3f} ({:.3f}) | {:.2f}/{:.2f} [{:.2f} s/it]".format(
+                        epoch,
+                        idx,
+                        loss_meter.val,
+                        loss_meter.avg,
+                        time_meter.sum,
+                        time_meter.avg * len_,
+                        time_meter.avg,
+                    )
+                )
+            start += curr_iter
+
     if epoch == None:
-        print('Final TEST metrics | ' + final_metrics)
+        final_metrics = " | ".join(
+            ["{}: {:.3f}".format(name, metrics[name].avg) for name in metrics]
+        )
+        print("Final TEST metrics | " + final_metrics)
+        return metrics
     else:
-        print(f'VAL Epoch {epoch} | ' + final_metrics)
-    return metrics
+        return loss_meter.avg
