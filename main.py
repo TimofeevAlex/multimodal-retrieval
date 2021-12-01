@@ -39,8 +39,8 @@ def run_train(
     len_ = len(train_dataset)
     train_size = len_ - 5000
     train_dataset = torch.utils.data.Subset(
-        train_dataset, torch.arange(1280)
-    )  # train_size
+        train_dataset, train_size
+    )  
     train_loader = DataLoader(train_dataset, **params)
     # Define val loader
     val_dataset = dset.CocoCaptions(
@@ -50,7 +50,7 @@ def run_train(
     )
     val_dataset = loader.ImgCaptLoader(val_dataset, tokenizer, MAX_LEN)
     val_indices = torch.arange(train_size, len_)
-    val_dataset = torch.utils.data.Subset(val_dataset, torch.arange(1280))
+    val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
@@ -71,7 +71,7 @@ def run_train(
     params += list(filter(lambda p: p.requires_grad, text_embedder.parameters()))
 
     optimizer = torch.optim.Adam(params=params, lr=LEARNING_RATE)
-    scheduler = MultiStepLR(optimizer, milestones=[15], gamma=0.1)
+    # scheduler = MultiStepLR(optimizer, milestones=[15], gamma=0.1)
 
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
@@ -108,7 +108,7 @@ def run_train(
         )
         # Add metrics to tensorboard
         writer.add_scalar("loss/val", loss_val, epoch)
-        scheduler.step()
+        # scheduler.step()
         # Save the model
         torch.save(
             text_embedder.state_dict(), osp.join(models_dir, f"text_embedder_{epoch}")
@@ -186,7 +186,7 @@ def main() -> None:
 
     parser.add_argument("--MAX_LEN", type=int, default=32)
 
-    parser.add_argument("--EPOCHS", type=int, default=30)
+    parser.add_argument("--EPOCHS", type=int, default=20)
 
     parser.add_argument("--LEARNING_RATE", type=float, default=2e-4)
 
