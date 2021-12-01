@@ -32,17 +32,22 @@ def run_train(
         root=osp.join(DATA_DIRECTORY, "train2014"),
         annFile=osp.join(DATA_DIRECTORY, annot_train),
         transform=loader.get_transform("train"),
-    )[:-5000]
+    )
+
     params = {"batch_size": BATCH_SIZE, "shuffle": False}
     train_dataset = loader.ImgCaptLoader(tr_dataset, tokenizer, MAX_LEN)
+    train_size = len(train_dataset) - 5000
+    train_dataset = torch.utils.data.Subset(train_dataset, torch.arange(train_size))
     train_loader = DataLoader(train_dataset, **params)
     # Define val loader
     val_dataset = dset.CocoCaptions(
         root=osp.join(DATA_DIRECTORY, "train2014"),
         annFile=osp.join(DATA_DIRECTORY, annot_train),
         transform=loader.get_transform("val"),
-    )[-5000:]
+    )
     val_dataset = loader.ImgCaptSetLoader(val_dataset, tokenizer, MAX_LEN)
+    val_indices = torch.arange(train_size, len(train_dataset))
+    val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
@@ -95,10 +100,10 @@ def run_test(
     tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
     test_dataset = dset.CocoCaptions(
         root=im_dir, annFile=cap_file, transform=loader.get_transform("test")
-    )[:5000]
+    )
     test_dataset = loader.ImgCaptSetLoader(test_dataset, tokenizer, MAX_LEN)
+    test_dataset = torch.utils.data.Subset(test_dataset, torch.arange(5000))
     test_params = {"batch_size": BATCH_SIZE, "shuffle": False}
-    # validation_dataset = torch.utils.data.Subset(validation_dataset, torch.arange(1024))
     test_loader = DataLoader(test_dataset, **test_params)
 
     if LOSS == "triplet":
