@@ -39,7 +39,7 @@ def run_train(
     len_ = len(train_dataset)
     train_size = len_ - 5000
     train_dataset = torch.utils.data.Subset(
-        train_dataset, train_size
+        train_dataset, torch.arange(train_size)
     )  
     train_loader = DataLoader(train_dataset, **params)
     # Define val loader
