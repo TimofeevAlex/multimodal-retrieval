@@ -131,7 +131,7 @@ def run_test(
     )
     test_dataset = loader.ImgCaptSetLoader(test_dataset, tokenizer, MAX_LEN)
     test_dataset = torch.utils.data.Subset(test_dataset, torch.arange(5000))
-    test_params = {"batch_size": BATCH_SIZE, "shuffle": False}
+    test_params = {"batch_size": len(test_dataset), "shuffle": False}
     test_loader = DataLoader(test_dataset, **test_params)
 
     if LOSS == "triplet":
@@ -144,7 +144,7 @@ def run_test(
         raise ValueError("Loss can be triplet/SimCLR")
 
     eval.evaluate(
-        image_embedder, text_embedder, test_loader, loss_fn, [1, 5, 10], device
+        image_embedder, text_embedder, test_loader, loss_fn, device
     )
 
 

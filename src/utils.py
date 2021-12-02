@@ -28,9 +28,10 @@ class AverageMeter(object):
 
 
 # can be moved to another class
-def create_dict_meters(ks):
+def create_dict_meters():
     metric_names = (
-        ["mr_i2t", "mr_t2i"] + [f"r@{k}_i2t" for k in ks] + [f"r@{k}_t2i" for k in ks]
+        ["i2t_meanr", "i2t_medr", "i2t_r@10","i2t_r@5", "i2t_r@1", 
+         "t2i_meanr", "t2i_medr", "t2i_r@10","t2i_r@5", "t2i_r@1"]
     )
     metrics = {name: AverageMeter() for name in metric_names}
     return metrics
