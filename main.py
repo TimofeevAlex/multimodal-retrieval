@@ -130,7 +130,7 @@ def run_test(
         root=im_dir, annFile=cap_file, transform=loader.get_transform("test")
     )
     test_dataset = loader.ImgCaptSetLoader(test_dataset, tokenizer, MAX_LEN)
-    test_dataset = torch.utils.data.Subset(test_dataset, torch.arange(1280))
+    test_dataset = torch.utils.data.Subset(test_dataset, torch.arange(5000))
     test_params = {"batch_size": BATCH_SIZE, "shuffle": False}
     test_loader = DataLoader(test_dataset, **test_params)
 
@@ -152,7 +152,8 @@ def read_embedders(path):
     print("Loading models from input directory")
     text_embedder = model.DistilBERT(finetune="all", embedding_size=512).to(device)
     text_embedder.load_state_dict(torch.load(path))
-    return text_embedder
+    image_embedder = model.ResNet34().to(device)
+    return image_embedder, text_embedder
 
 
 def str2bool(v):
