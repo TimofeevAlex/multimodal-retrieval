@@ -71,7 +71,7 @@ def run_train(
     params += list(filter(lambda p: p.requires_grad, text_embedder.parameters()))
 
     optimizer = torch.optim.Adam(params=params, lr=LEARNING_RATE)
-    # scheduler = MultiStepLR(optimizer, milestones=[15], gamma=0.1)
+    scheduler = MultiStepLR(optimizer, milestones=[5], gamma=0.1)
 
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
@@ -108,7 +108,7 @@ def run_train(
         )
         # Add metrics to tensorboard
         writer.add_scalar("loss/val", loss_val, epoch)
-        # scheduler.step()
+        scheduler.step()
         # Save the model
         torch.save(
             text_embedder.state_dict(), osp.join(models_dir, f"text_embedder_{epoch}")
