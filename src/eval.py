@@ -72,6 +72,7 @@ def t2i(images, captions, caplens, sims, npts=None, return_ranks=False):
     else:
         return (r1, r5, r10, medr, meanr)
 
+
 def evaluate(image_embedder, text_embedder, loader, loss_fn, device, epoch=None):
     # We will do test on all five captions
     image_embedder.eval()

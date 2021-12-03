@@ -22,6 +22,7 @@ def run_train(
     BATCH_SIZE,
     EPOCHS,
     LEARNING_RATE,
+    WEIGHT_DECAY,
     OUTPUT_DIRECTORY,
     LOSS,
     writer,
@@ -38,9 +39,7 @@ def run_train(
     train_dataset = loader.ImgCaptLoader(tr_dataset, tokenizer, MAX_LEN)
     len_ = len(train_dataset)
     train_size = len_ - 5000
-    train_dataset = torch.utils.data.Subset(
-        train_dataset, torch.arange(train_size)
-    )  
+    train_dataset = torch.utils.data.Subset(train_dataset, torch.arange(train_size))
     train_loader = DataLoader(train_dataset, **params)
     # Define val loader
     val_dataset = dset.CocoCaptions(
@@ -70,7 +69,9 @@ def run_train(
     params = list(filter(lambda p: p.requires_grad, image_embedder.parameters()))
     params += list(filter(lambda p: p.requires_grad, text_embedder.parameters()))
 
-    optimizer = torch.optim.Adam(params=params, lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(
+        params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+    )
     scheduler = MultiStepLR(optimizer, milestones=[5], gamma=0.1)
 
     create_dir(OUTPUT_DIRECTORY)
@@ -143,9 +144,7 @@ def run_test(
     else:
         raise ValueError("Loss can be triplet/SimCLR")
 
-    eval.evaluate(
-        image_embedder, text_embedder, test_loader, loss_fn, device
-    )
+    eval.evaluate(image_embedder, text_embedder, test_loader, loss_fn, device)
 
 
 def read_embedders(path):
@@ -190,6 +189,8 @@ def main() -> None:
     parser.add_argument("--EPOCHS", type=int, default=20)
 
     parser.add_argument("--LEARNING_RATE", type=float, default=2e-4)
+
+    parser.add_argument("--WEIGHT_DECAY", type=float, default=5e-4)
 
     parser.add_argument("--BATCH_SIZE", type=int, default=256)
 
@@ -245,6 +246,7 @@ def main() -> None:
             options.BATCH_SIZE,
             options.EPOCHS,
             options.LEARNING_RATE,
+            options.WEIGHT_DECAY,``
             options.OUTPUT_DIRECTORY,
             options.LOSS,
             writer,
