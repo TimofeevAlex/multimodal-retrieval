@@ -1,17 +1,17 @@
+import argparse
 import os
 import os.path as osp
-import argparse
 from datetime import datetime
 
 import torch
 import torch.nn.functional as F
 import torchvision.datasets as dset
-from src import eval, loader, loss, model, train
+from src import eval, loader, loss, model, test, train
 from torch import cuda
-from torch.utils.data import DataLoader
-from transformers import DistilBertTokenizerFast
-from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import MultiStepLR
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from transformers import DistilBertTokenizerFast
 
 device = "cuda" if cuda.is_available() else "cpu"
 
@@ -27,7 +27,8 @@ def run_train(
     LOSS,
     writer,
 ):
-    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+    tokenizer = DistilBertTokenizerFast.from_pretrained(
+        "distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
     # Define train loader
     tr_dataset = dset.CocoCaptions(
@@ -38,8 +39,9 @@ def run_train(
     params = {"batch_size": BATCH_SIZE, "shuffle": False}
     train_dataset = loader.ImgCaptLoader(tr_dataset, tokenizer, MAX_LEN)
     len_ = len(train_dataset)
-    train_size = len_ - 5000
-    train_dataset = torch.utils.data.Subset(train_dataset, torch.arange(train_size))
+    train_size = len_ - 50000
+    train_dataset = torch.utils.data.Subset(
+        train_dataset, torch.arange(train_size))
     train_loader = DataLoader(train_dataset, **params)
     # Define val loader
     val_dataset = dset.CocoCaptions(
@@ -53,7 +55,8 @@ def run_train(
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    text_embedder = model.DistilBERT(finetune="all", embedding_size=512).to(device)
+    text_embedder = model.DistilBERT(
+        finetune="all", embedding_size=512).to(device)
     image_embedder = model.ResNet34().to(device)
 
     # Define loss function
@@ -66,8 +69,10 @@ def run_train(
     else:
         raise ValueError("Loss can be triplet/SimCLR")
 
-    params = list(filter(lambda p: p.requires_grad, image_embedder.parameters()))
-    params += list(filter(lambda p: p.requires_grad, text_embedder.parameters()))
+    params = list(filter(lambda p: p.requires_grad,
+                  image_embedder.parameters()))
+    params += list(filter(lambda p: p.requires_grad,
+                   text_embedder.parameters()))
 
     optimizer = torch.optim.Adam(
         params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
@@ -77,12 +82,14 @@ def run_train(
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
         OUTPUT_DIRECTORY,
-        str(datetime.now()).split(".")[0].replace(" ", "_")
-        + f"_{LOSS}_{LEARNING_RATE}",
+        f"_{LOSS}_{LEARNING_RATE}_"
+        + str(datetime.now()).split(".")[0].replace(" ", "_")
     )
     create_dir(models_dir)
 
     print("Start training")
+    best_epoch = 0
+    best_val_loss = int('inf')
     for epoch in range(EPOCHS):
         # train one epoch
         loss_tr = train.train_one_epoch(
@@ -110,46 +117,55 @@ def run_train(
         # Add metrics to tensorboard
         writer.add_scalar("loss/val", loss_val, epoch)
         scheduler.step()
-        # Save the model
-        torch.save(
-            text_embedder.state_dict(), osp.join(models_dir, f"text_embedder_{epoch}")
-        )
-
-    return image_embedder, text_embedder
+        if loss_val <= best_val_loss:
+            best_val_loss = loss_val
+            best_epoch = epoch
+            # Save the model
+            torch.save(
+                text_embedder.state_dict(), osp.join(
+                    models_dir, f"text_embedder_{epoch}")
+            )
+    # Upload the best model weights
+    best_model_path = osp.join(models_dir, f"text_embedder_{best_epoch}")
+    text_embedder.load_state_dict(torch.load(best_model_path))
+    return text_embedder
 
 
 def run_test(
-    DATA_DIRECTORY, MAX_LEN, BATCH_SIZE, LOSS, image_embedder, text_embedder, writer
+    DATA_DIRECTORY, MAX_LEN, image_embedder, text_embedder, writer
 ):
     im_dir = osp.join(DATA_DIRECTORY, "val2014")
     annot_val = osp.join("annotations", "captions_val2014.json")
     cap_file = osp.join(DATA_DIRECTORY, annot_val)
 
     print("Running evaluations")
-    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+    tokenizer = DistilBertTokenizerFast.from_pretrained(
+        "distilbert-base-uncased"
+    )
     test_dataset = dset.CocoCaptions(
         root=im_dir, annFile=cap_file, transform=loader.get_transform("test")
     )
-    test_dataset = loader.ImgCaptSetLoader(test_dataset, tokenizer, MAX_LEN)
-    test_dataset = torch.utils.data.Subset(test_dataset, torch.arange(5000))
-    test_params = {"batch_size": len(test_dataset), "shuffle": False}
-    test_loader = DataLoader(test_dataset, **test_params)
+    test_dataset_i2t = loader.ImgCaptSetLoader(
+        test_dataset, tokenizer, MAX_LEN, i2t=True
+    )
+    test_dataset_t2i = loader.ImgCaptSetLoader(
+        test_dataset, tokenizer, MAX_LEN, i2t=False
+    )
+    test_params = {"batch_size": 1, "shuffle": False}
+    test_loader_i2t = DataLoader(test_dataset_i2t, **test_params)
+    test_loader_t2i = DataLoader(test_dataset_t2i, **test_params)
 
-    if LOSS == "triplet":
-        loss_fn = loss.HingeTripletRankingLoss(
-            margin=0.2, device=device, mining_negatives="max"
-        ).to(device)
-    elif LOSS == "SimCLR":
-        loss_fn = loss.SimCLRLoss(temp=0.07, device=device).to(device)
-    else:
-        raise ValueError("Loss can be triplet/SimCLR")
-
-    eval.evaluate(image_embedder, text_embedder, test_loader, loss_fn, device)
+    metrics_t2i, metrics_i2t = test.test(
+        image_embedder, text_embedder, test_loader_t2i, test_loader_i2t, device
+    )
+    writer.add_scalars("metrics/t2i", metrics_t2i)
+    writer.add_scalars("metrics/i2t", metrics_i2t)
 
 
 def read_embedders(path):
     print("Loading models from input directory")
-    text_embedder = model.DistilBERT(finetune="all", embedding_size=512).to(device)
+    text_embedder = model.DistilBERT(
+        finetune="all", embedding_size=512).to(device)
     text_embedder.load_state_dict(torch.load(path))
     image_embedder = model.ResNet34().to(device)
     return image_embedder, text_embedder
@@ -181,31 +197,23 @@ def main() -> None:
     )
 
     parser.add_argument("--DOWNLOAD", type=str2bool, default=False)
-
     parser.add_argument("--DATA_DIRECTORY", type=str, default="dataset")
-
     parser.add_argument("--MAX_LEN", type=int, default=32)
-
     parser.add_argument("--EPOCHS", type=int, default=20)
-
     parser.add_argument("--LEARNING_RATE", type=float, default=2e-4)
-
     parser.add_argument("--WEIGHT_DECAY", type=float, default=5e-4)
-
     parser.add_argument("--BATCH_SIZE", type=int, default=256)
-
     parser.add_argument("--OUTPUT_DIRECTORY", type=str, default="model")
-
     parser.add_argument("--INPUT_DIRECTORY", type=str, default="")
-
     parser.add_argument("--LOSS", type=str, default="triplet")
 
     options = parser.parse_args()
 
     # Download MS-COCO
     if options.DOWNLOAD:
-        import wget
         from zipfile import ZipFile
+
+        import wget
 
         # create a dir for the dataset
         create_dir(options.DATA_DIRECTORY)
@@ -234,35 +242,35 @@ def main() -> None:
 
     # Create a writer for tensorboard
     now = str(datetime.now()).split(".")[0].replace(" ", "_")
-    exp_name = f"{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
     log_dir = "logs"
     create_dir(log_dir)
-    writer = SummaryWriter(osp.join(log_dir, exp_name))
-    # Run training
+    # Run training or load models for testing
     if options.INPUT_DIRECTORY == "":
+        exp_name = f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
+        writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = run_train(
             options.DATA_DIRECTORY,
             options.MAX_LEN,
             options.BATCH_SIZE,
             options.EPOCHS,
             options.LEARNING_RATE,
-            options.WEIGHT_DECAY,``
+            options.WEIGHT_DECAY,
             options.OUTPUT_DIRECTORY,
             options.LOSS,
             writer,
         )
     else:
+        exp_name = f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
+        writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = read_embedders(options.INPUT_DIRECTORY)
 
     # Test trained models
     run_test(
         options.DATA_DIRECTORY,
         options.MAX_LEN,
-        options.BATCH_SIZE,
-        options.LOSS,
         image_embedder,
         text_embedder,
-        writer,
+        writer
     )
     writer.close()
 

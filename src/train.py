@@ -1,6 +1,7 @@
+from time import time
+
 import torch
 from src.utils import AverageMeter
-from time import time
 
 # device = "cuda" if cuda.is_available() else "cpu"
 # max_len = data_qoutations.quotation.str.split().str.len().max()
@@ -9,7 +10,7 @@ from time import time
 def train_one_epoch(
     epoch, image_embedder, text_embedder, loss_fn, loader, optimizer, device
 ):
-    image_embedder.train()
+    image_embedder.eval()
     text_embedder.train()
     loss_meter = AverageMeter()
     time_meter = AverageMeter()
@@ -18,10 +19,10 @@ def train_one_epoch(
     for idx, data in enumerate(loader):
         optimizer.zero_grad()
         # Extract positive captions
-        ids = data["ids"].to(device, dtype=torch.long)
-        masks = data["mask"].to(device, dtype=torch.long)
+        ids = data["ids"].to(device)
+        masks = data["mask"].to(device)
         # Extract images
-        input_images = data["image"].to(device, dtype=torch.float)
+        input_images = data["image"].to(device)
         # Compute embeddings for images and texts
         image_embeds = image_embedder(input_images)
         text_embeds = text_embedder(ids, masks)
