@@ -19,10 +19,10 @@ def train_one_epoch(
     for idx, data in enumerate(loader):
         optimizer.zero_grad()
         # Extract positive captions
-        ids = data["ids"].to(device)
-        masks = data["mask"].to(device)
+        ids = data["ids"][0].to(device)
+        masks = data["mask"][0].to(device)
         # Extract images
-        input_images = data["image"].to(device)
+        input_images = data["image"][0].to(device)
         # Compute embeddings for images and texts
         image_embeds = image_embedder(input_images)
         text_embeds = text_embedder(ids, masks)

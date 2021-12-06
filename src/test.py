@@ -3,23 +3,20 @@ from time import time
 import numpy as np
 import torch
 import torch.nn.functional as F
-from src.utils import AverageMeter, create_dict_meters
+from src.utils import AverageMeter
 
 
 def compute_ranks_i2t(sims, start_index, npts):
-    ranks = np.zeros(npts)
+    ranks = np.zeros((npts, 5))
     # top1 = np.zeros(npts)
 
     for index in range(npts):
         inds = torch.flip(np.argsort(sims[index]), [0])
 
         # Score
-        rank = 1e20
-        for i in range(start_index + 5 * index, start_index + 5 * index + 5, 1):
-            tmp = np.where(inds == i)[0][0]
-            if tmp < rank:
-                rank = tmp
-        ranks[index] = rank
+        for i, true_ind in enumerate(range(start_index + 5 * index, start_index + 5 * index + 5, 1)):
+            rank = np.where(inds == true_ind)[0][0]
+            ranks[index, i]  = rank
         # top1[index] = inds[0]
 
     return ranks
@@ -37,17 +34,19 @@ def compute_ranks_t2i(sims, start_index, npts):
     return ranks
 
 
-def compute_metrics(ranks):
-    r1 = 100.0 * len(np.where(ranks < 1)[0]) / len(ranks)
-    r5 = 100.0 * len(np.where(ranks < 5)[0]) / len(ranks)
-    r10 = 100.0 * len(np.where(ranks < 10)[0]) / len(ranks)
-    medr = np.floor(np.median(ranks)) + 1
-    meanr = ranks.mean() + 1
+def compute_metrics(ranks, num_relevants):
+    if num_relevants == 1:
+        ranks = np.expand_dims(ranks, -1)
+    r1 = 100.0 * np.mean((ranks < 1).sum(1) / num_relevants)
+    r5 = 100.0 * np.mean((ranks < 5).sum(1) / num_relevants)
+    r10 = 100.0 * np.mean((ranks < 10).sum(1) / num_relevants)
+    medr = np.floor(np.median(ranks.min(1))) + 1
+    meanr = ranks.min(1).mean() + 1
     return r1, r5, r10, medr, meanr
 
 
 def metrics_i2t(ranks):
-    r1, r5, r10, medr, meanr = compute_metrics(ranks)
+    r1, r5, r10, medr, meanr = compute_metrics(ranks, 5)
     return {
         "i2t_meanr": meanr,
         "i2t_medr": medr,
@@ -58,7 +57,7 @@ def metrics_i2t(ranks):
 
 
 def metrics_t2i(ranks):
-    r1, r5, r10, medr, meanr = compute_metrics(ranks)
+    r1, r5, r10, medr, meanr = compute_metrics(ranks, 1)
     return {
         "t2i_meanr": meanr,
         "t2i_medr": medr,
@@ -76,15 +75,15 @@ def test_i2t(image_embedder, text_embedder, loader, device):
     len_ = len(loader)
     batch_size = loader.dataset.batch_size
     num_captions = loader.dataset.num_captions
-    iters_per_image_batch = (num_captions // batch_size)
+    iters_per_image_batch = (num_captions // batch_size) - 1
     start = time()
     image_ranks = np.array([])
     with torch.no_grad():
         for idx, data in enumerate(loader):
-            if ((idx + 1) % iters_per_image_batch == 0) or (idx == 0):
+            if idx % iters_per_image_batch == 0:
                 if idx != 0:
                     # Store ranks for current
-                    start_index = (idx * batch_size) // num_captions
+                    start_index = ((idx * batch_size) // num_captions) * batch_size
                     batch_image_ranks = compute_ranks_i2t(
                         sim_matrix, start_index, batch_size
                     )
@@ -101,14 +100,15 @@ def test_i2t(image_embedder, text_embedder, loader, device):
             text_embeds = text_embedder(ids[0], masks[0])
             text_embeds_norm = F.normalize(text_embeds, dim=1)
             # Batch similarities
-            sim_matrix[:, idx*batch_size:(idx+1)*batch_size] = torch.mm(
+            sample_index = (idx * batch_size) % num_captions
+            sim_matrix[:, sample_index:sample_index + batch_size] = torch.mm(
                 image_embeds_norm, text_embeds_norm.T
             ).cpu()
             # Logging
             curr_iter = time() - start
             time_meter.update(time() - start)
             print(
-                "TEST T2I Batch [{}] | {:.2f}/{:.2f} [{:.2f} s/it]".format(
+                "TEST I2T Batch [{}] | {:.2f}/{:.2f} [{:.2f} s/it]".format(
                     idx,
                     time_meter.sum,
                     time_meter.avg * len_,
@@ -116,7 +116,7 @@ def test_i2t(image_embedder, text_embedder, loader, device):
                 )
             )
             start += curr_iter
-    metrics = metrics_i2t(image_ranks)
+    metrics = metrics_i2t(image_ranks.reshape((-1, 5)))
     return metrics
 
 
@@ -128,15 +128,15 @@ def test_t2i(image_embedder, text_embedder, loader, device):
     len_ = len(loader)
     batch_size = loader.dataset.batch_size
     num_images = loader.dataset.num_images
-    iters_per_image_batch = (num_images // batch_size)
+    iters_per_image_batch = (num_images // batch_size) - 1
     start = time()
     text_ranks = np.array([])
     with torch.no_grad():
         for idx, data in enumerate(loader):
-            if ((idx + 1) % iters_per_image_batch == 0) or (idx == 0):
+            if idx  % iters_per_image_batch == 0:
                 if idx != 0:
                     # Store ranks for current
-                    start_index = (idx * batch_size) // num_images
+                    start_index = ((idx * batch_size) // num_images) * batch_size / 5
                     batch_text_ranks = compute_ranks_t2i(
                         sim_matrix, start_index, batch_size
                     )
@@ -153,7 +153,8 @@ def test_t2i(image_embedder, text_embedder, loader, device):
             image_embeds = image_embedder(input_images)
             image_embeds_norm = F.normalize(image_embeds, dim=1)
             # Batch similarities
-            sim_matrix[:, idx*batch_size:(idx+1)*batch_size] = torch.mm(
+            sample_index = (idx * batch_size) % num_images
+            sim_matrix[:, sample_index:sample_index + batch_size] = torch.mm(
                 text_embeds_norm, image_embeds_norm.T
             ).cpu()
             # Logging
@@ -173,8 +174,8 @@ def test_t2i(image_embedder, text_embedder, loader, device):
 
 
 def test(image_embedder, text_embedder, loader_t2i, loader_i2t, device):
-    metrics_t2i = test_t2i(image_embedder, text_embedder, loader_t2i, device)
-    metrics_i2t = test_i2t(image_embedder, text_embedder, loader_i2t, device)
+    metrics_val_t2i = test_t2i(image_embedder, text_embedder, loader_t2i, device)
+    metrics_val_i2t = test_i2t(image_embedder, text_embedder, loader_i2t, device)
     final_metrics_t2i = " | ".join(
         ["{}: {:.3f}".format(name, metrics_t2i[name]) for name in metrics_t2i]
     )
@@ -184,4 +185,4 @@ def test(image_embedder, text_embedder, loader_t2i, loader_i2t, device):
     print("Final TEST metrics")
     print('T2I | ' + final_metrics_t2i)
     print('I2T | ' + final_metrics_i2t)
-    return metrics_t2i, metrics_i2t
+    return metrics_val_t2i, metrics_val_i2t

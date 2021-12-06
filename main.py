@@ -27,8 +27,7 @@ def run_train(
     LOSS,
     writer,
 ):
-    tokenizer = DistilBertTokenizerFast.from_pretrained(
-        "distilbert-base-uncased")
+    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
     # Define train loader
     tr_dataset = dset.CocoCaptions(
@@ -36,27 +35,39 @@ def run_train(
         annFile=osp.join(DATA_DIRECTORY, annot_train),
         transform=loader.get_transform("train"),
     )
-    params = {"batch_size": BATCH_SIZE, "shuffle": False}
-    train_dataset = loader.ImgCaptLoader(tr_dataset, tokenizer, MAX_LEN)
-    len_ = len(train_dataset)
-    train_size = len_ - 50000
-    train_dataset = torch.utils.data.Subset(
-        train_dataset, torch.arange(train_size))
+    params = {"batch_size": 1, "shuffle": True}
+    len_ = len(tr_dataset)
+    train_size = len_ - 5000
+    indices = torch.arange(train_size)
+    train_dataset = loader.ImgCaptLoader(
+        tr_dataset,
+        tokenizer,
+        MAX_LEN,
+        BATCH_SIZE,
+        indices=indices,
+        sample_pos=True,
+        shuffle=True,
+    )
+    # train_dataset = torch.utils.data.Subset(
+    #     train_dataset, torch.arange(train_size))
     train_loader = DataLoader(train_dataset, **params)
     # Define val loader
+    params = {"batch_size": 1, "shuffle": False}
     val_dataset = dset.CocoCaptions(
         root=osp.join(DATA_DIRECTORY, "train2014"),
         annFile=osp.join(DATA_DIRECTORY, annot_train),
         transform=loader.get_transform("val"),
     )
-    val_dataset = loader.ImgCaptLoader(val_dataset, tokenizer, MAX_LEN)
-    val_indices = torch.arange(train_size, len_)
-    val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
+    indices = torch.arange(train_size, len_)
+    val_dataset = loader.ImgCaptLoader(
+        val_dataset, tokenizer, MAX_LEN, BATCH_SIZE, indices=indices
+    )
+    # val_indices = torch.arange(train_size, len_)
+    # val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    text_embedder = model.DistilBERT(
-        finetune="all", embedding_size=512).to(device)
+    text_embedder = model.DistilBERT(finetune="all", embedding_size=512).to(device)
     image_embedder = model.ResNet34().to(device)
 
     # Define loss function
@@ -69,10 +80,8 @@ def run_train(
     else:
         raise ValueError("Loss can be triplet/SimCLR")
 
-    params = list(filter(lambda p: p.requires_grad,
-                  image_embedder.parameters()))
-    params += list(filter(lambda p: p.requires_grad,
-                   text_embedder.parameters()))
+    params = list(filter(lambda p: p.requires_grad, image_embedder.parameters()))
+    params += list(filter(lambda p: p.requires_grad, text_embedder.parameters()))
 
     optimizer = torch.optim.Adam(
         params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
@@ -83,13 +92,13 @@ def run_train(
     models_dir = osp.join(
         OUTPUT_DIRECTORY,
         f"_{LOSS}_{LEARNING_RATE}_"
-        + str(datetime.now()).split(".")[0].replace(" ", "_")
+        + str(datetime.now()).split(".")[0].replace(" ", "_"),
     )
     create_dir(models_dir)
 
     print("Start training")
     best_epoch = 0
-    best_val_loss = int('inf')
+    best_val_loss = int("inf")
     for epoch in range(EPOCHS):
         # train one epoch
         loss_tr = train.train_one_epoch(
@@ -122,8 +131,8 @@ def run_train(
             best_epoch = epoch
             # Save the model
             torch.save(
-                text_embedder.state_dict(), osp.join(
-                    models_dir, f"text_embedder_{epoch}")
+                text_embedder.state_dict(),
+                osp.join(models_dir, f"text_embedder_{epoch}"),
             )
     # Upload the best model weights
     best_model_path = osp.join(models_dir, f"text_embedder_{best_epoch}")
@@ -131,17 +140,13 @@ def run_train(
     return text_embedder
 
 
-def run_test(
-    DATA_DIRECTORY, MAX_LEN, image_embedder, text_embedder, writer
-):
+def run_test(DATA_DIRECTORY, MAX_LEN, image_embedder, text_embedder, writer):
     im_dir = osp.join(DATA_DIRECTORY, "val2014")
     annot_val = osp.join("annotations", "captions_val2014.json")
     cap_file = osp.join(DATA_DIRECTORY, annot_val)
 
     print("Running evaluations")
-    tokenizer = DistilBertTokenizerFast.from_pretrained(
-        "distilbert-base-uncased"
-    )
+    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     test_dataset = dset.CocoCaptions(
         root=im_dir, annFile=cap_file, transform=loader.get_transform("test")
     )
@@ -164,8 +169,7 @@ def run_test(
 
 def read_embedders(path):
     print("Loading models from input directory")
-    text_embedder = model.DistilBERT(
-        finetune="all", embedding_size=512).to(device)
+    text_embedder = model.DistilBERT(finetune="all", embedding_size=512).to(device)
     text_embedder.load_state_dict(torch.load(path))
     image_embedder = model.ResNet34().to(device)
     return image_embedder, text_embedder
@@ -266,11 +270,7 @@ def main() -> None:
 
     # Test trained models
     run_test(
-        options.DATA_DIRECTORY,
-        options.MAX_LEN,
-        image_embedder,
-        text_embedder,
-        writer
+        options.DATA_DIRECTORY, options.MAX_LEN, image_embedder, text_embedder, writer
     )
     writer.close()
 
