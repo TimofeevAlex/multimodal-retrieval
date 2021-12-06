@@ -81,7 +81,7 @@ def test_i2t(image_embedder, text_embedder, loader, device):
     image_ranks = np.array([])
     with torch.no_grad():
         for idx, data in enumerate(loader):
-            if idx % iters_per_image_batch == 0:
+            if ((idx + 1) % iters_per_image_batch == 0) or (idx == 0):
                 if idx != 0:
                     # Store ranks for current
                     start_index = (idx * batch_size) // num_captions
@@ -133,7 +133,7 @@ def test_t2i(image_embedder, text_embedder, loader, device):
     text_ranks = np.array([])
     with torch.no_grad():
         for idx, data in enumerate(loader):
-            if idx % iters_per_image_batch == 0:
+            if ((idx + 1) % iters_per_image_batch == 0) or (idx == 0):
                 if idx != 0:
                     # Store ranks for current
                     start_index = (idx * batch_size) // num_images
