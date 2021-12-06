@@ -2,7 +2,7 @@ from time import time
 
 import numpy as np
 import torch
-import torch.functional as F
+import torch.nn.functional as F
 from src.utils import AverageMeter, create_dict_meters
 
 
@@ -74,9 +74,8 @@ def test_i2t(image_embedder, text_embedder, loader, device):
 
     time_meter = AverageMeter()
     len_ = len(loader)
-    batch_size = loader.batch_size
-    num_captions = loader.num_captions
-    num_images = loader.num_images
+    batch_size = loader.dataset.batch_size
+    num_captions = loader.dataset.num_captions
     iters_per_image_batch = (num_captions // batch_size)
     start = time()
     image_ranks = np.array([])
@@ -90,20 +89,21 @@ def test_i2t(image_embedder, text_embedder, loader, device):
                         sim_matrix, start_index, batch_size
                     )
                     image_ranks = np.append(image_ranks, batch_image_ranks)
-                sim_matrix = torch.empty((num_images, num_captions))
+                sim_matrix = torch.empty((batch_size, num_captions)).cpu()
                 # Extract images
-                input_images = data["image"].to(device)
+                input_images = data["image"][0].to(device)
                 image_embeds = image_embedder(input_images)
                 image_embeds_norm = F.normalize(image_embeds, dim=1)
             # Extract captions
             ids = data["ids"].to(device)
             masks = data["mask"].to(device)
             # Compute embeddings for images and texts
-            text_embeds = text_embedder(ids, masks)
+            text_embeds = text_embedder(ids[0], masks[0])
             text_embeds_norm = F.normalize(text_embeds, dim=1)
             # Batch similarities
             sim_matrix[:, idx*batch_size:(idx+1)*batch_size] = torch.mm(
-                image_embeds_norm, text_embeds_norm.T)
+                image_embeds_norm, text_embeds_norm.T
+            ).cpu()
             # Logging
             curr_iter = time() - start
             time_meter.update(time() - start)
@@ -126,9 +126,8 @@ def test_t2i(image_embedder, text_embedder, loader, device):
 
     time_meter = AverageMeter()
     len_ = len(loader)
-    batch_size = loader.batch_size
-    num_captions = loader.num_captions
-    num_images = loader.num_images
+    batch_size = loader.dataset.batch_size
+    num_images = loader.dataset.num_images
     iters_per_image_batch = (num_images // batch_size)
     start = time()
     text_ranks = np.array([])
@@ -142,21 +141,21 @@ def test_t2i(image_embedder, text_embedder, loader, device):
                         sim_matrix, start_index, batch_size
                     )
                     text_ranks = np.append(text_ranks, batch_text_ranks)
-                sim_matrix = torch.empty((num_captions, num_images))
+                sim_matrix = torch.empty((batch_size, num_images)).cpu()
                 # Extract captions
                 ids = data["ids"].to(device)
                 masks = data["mask"].to(device)
                 # Compute embeddings for images and texts
-                text_embeds = text_embedder(ids, masks)
+                text_embeds = text_embedder(ids[0], masks[0])
                 text_embeds_norm = F.normalize(text_embeds, dim=1)
             # Extract images
-            input_images = data["image"].to(device)
+            input_images = data["image"][0].to(device)
             image_embeds = image_embedder(input_images)
             image_embeds_norm = F.normalize(image_embeds, dim=1)
             # Batch similarities
             sim_matrix[:, idx*batch_size:(idx+1)*batch_size] = torch.mm(
                 text_embeds_norm, image_embeds_norm.T
-            )
+            ).cpu()
             # Logging
             curr_iter = time() - start
             time_meter.update(time() - start)

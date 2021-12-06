@@ -44,10 +44,10 @@ class ImgCaptSetLoader(Dataset):
             if i == num_images:
                 break
             self.images.append(img)
-            self.captions.append(cap[:5])
+            self.captions.extend(cap[:5])
 
     def __len__(self):
-        return math.ceil(self.num_captions * self.num_images / self.batch_size ** 2)
+        return math.ceil(self.num_captions * self.num_images / self.batch_size ** 2)    
 
     def __getitem__(self, index):
         # Prepare indices
@@ -69,14 +69,16 @@ class ImgCaptSetLoader(Dataset):
             max_length=self.max_len,
             padding="max_length",
             truncation=True,
+            return_attention_mask=True,
+            return_token_type_ids=False
         )
-        ids = [input["input_ids"] for input in inputs]
-        mask = [input["attention_mask"] for input in inputs]
-
+        ids = inputs["input_ids"]
+        mask = inputs["attention_mask"]
+        
         return {
             "ids": torch.tensor(ids, dtype=torch.long),
             "mask": torch.tensor(mask, dtype=torch.long),
-            "image": torch.tensor(images, dtype=torch.float)
+            "image": torch.tensor(torch.stack(images), dtype=torch.float)
         }
 
 
