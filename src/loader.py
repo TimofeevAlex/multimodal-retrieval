@@ -4,6 +4,7 @@ import torch
 import torchvision.transforms as transforms  # tested with transformers 4.12.5
 from torch import cuda, nn
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 device = "cuda" if cuda.is_available() else "cpu"
 
@@ -39,7 +40,8 @@ class ImgCaptSetLoader(Dataset):
         # Prepare dataset
         self.images = []
         self.captions = []
-        for i, (img, cap) in enumerate(dataset):
+        print('Dataset loading')
+        for i, (img, cap) in tqdm(enumerate(dataset)):
             if i == num_images:
                 break
             self.images.append(img)
@@ -84,26 +86,26 @@ class ImgCaptSetLoader(Dataset):
 class ImgCaptLoader(Dataset):
     def __init__(self, dataset, tokenizer, max_len, batch_size, indices=None, sample_pos=False, shuffle=False):
         self.tokenizer = tokenizer
-        self.coco_dataset = dataset
+        # self.coco_dataset = np.array(dataset, dtype=object)[indices]
         self.max_len = max_len
         self.batch_size = batch_size
         self.shuffle = shuffle
         if indices == None:
             self.indices = np.arange(len(dataset))
         else:
-            self.indices= indices
+            self.indices = indices
+        self.num_samples = len(self.indices)
         self.sample_pos = sample_pos
         
         self.images = []
         self.captions = []
-        for i in indices:
+        print('Dataset loading')
+        for i in tqdm(self.indices):
             img, cap = dataset[i]
-            self.images.append(img)
+            self.images.append(np.array(img))
             self.captions.append(cap[:5])
         self.images = np.array(self.images) 
         self.captions = np.array(self.captions) 
-        
-        self.num_samples = len(self.images)
         self.epoch_indices = np.arange(self.num_samples)    
            
     def __len__(self):
@@ -113,17 +115,16 @@ class ImgCaptLoader(Dataset):
         if self.shuffle and (index == 0):
             self.epoch_indices = np.random.permutation(self.epoch_indices)
         sample_index = index * self.batch_size
-        cur_indices = self.epoch_indices[sample_index:sample_index + self.batch_size]
+        cur_indices = np.arange(256)#self.epoch_indices[sample_index:sample_index + self.batch_size]
         images = self.images[cur_indices]
-        captions = self.captions[cur_indices]
         if self.sample_pos:
             pos_samples = np.random.randint(0, 5, self.batch_size)
-            captions = self.captions[:, pos_samples]
+            captions = self.captions[cur_indices, pos_samples]
         else:
-            captions = self.captions[:, 0]
+            captions = self.captions[cur_indices, 0]
         # Processing captions
         inputs = self.tokenizer.batch_encode_plus(
-            captions,
+            list(captions),
             add_special_tokens=True,
             max_length=self.max_len,
             padding="max_length",
@@ -137,7 +138,7 @@ class ImgCaptLoader(Dataset):
         return {
             "ids": torch.tensor(ids, dtype=torch.long),
             "mask": torch.tensor(mask, dtype=torch.long),
-            "image": torch.tensor(torch.stack(images), dtype=torch.float)
+            "image": torch.tensor(images, dtype=torch.float)
         }
 
 

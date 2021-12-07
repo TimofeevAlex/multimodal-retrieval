@@ -1,6 +1,7 @@
 import argparse
 import os
 import os.path as osp
+import sys
 from datetime import datetime
 
 import torch
@@ -86,7 +87,7 @@ def run_train(
     optimizer = torch.optim.Adam(
         params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
-    scheduler = MultiStepLR(optimizer, milestones=[5], gamma=0.1)
+    # scheduler = MultiStepLR(optimizer, milestones=[5], gamma=0.1)
 
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
@@ -98,7 +99,7 @@ def run_train(
 
     print("Start training")
     best_epoch = 0
-    best_val_loss = int("inf")
+    best_val_loss = int(sys.maxsize)
     for epoch in range(EPOCHS):
         # train one epoch
         loss_tr = train.train_one_epoch(
@@ -119,13 +120,12 @@ def run_train(
             text_embedder,
             val_loader,
             loss_fn,
-            [1, 5, 10],
             device,
             epoch,
         )
         # Add metrics to tensorboard
         writer.add_scalar("loss/val", loss_val, epoch)
-        scheduler.step()
+        # scheduler.step()
         if loss_val <= best_val_loss:
             best_val_loss = loss_val
             best_epoch = epoch
