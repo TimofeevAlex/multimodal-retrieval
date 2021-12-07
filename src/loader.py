@@ -87,7 +87,7 @@ class ImgCaptLoader(Dataset):
         self.coco_dataset = dataset
         self.max_len = max_len
         self.batch_size = batch_size
-        
+        self.shuffle = shuffle
         if indices == None:
             self.indices = np.arange(len(dataset))
         else:
@@ -103,24 +103,24 @@ class ImgCaptLoader(Dataset):
         self.images = np.array(self.images) 
         self.captions = np.array(self.captions) 
         
-        self.num_samples = len(self.images)    
-        if shuffle:
-            shuffled_inds = np.random.shuffle(np.arange(self.num_samples)) 
-            self.images = self.images[shuffled_inds]
-            self.captions = self.captions[shuffled_inds]
+        self.num_samples = len(self.images)
+        self.epoch_indices = np.arange(self.num_samples)    
            
     def __len__(self):
         return math.ceil(self.num_samples / self.batch_size)
 
     def __getitem__(self, index): 
+        if self.shuffle and (index == 0):
+            self.epoch_indices = np.random.permutation(self.epoch_indices)
         sample_index = index * self.batch_size
-        # Get this batch of images
-        images = self.images[sample_index:sample_index + self.batch_size]
+        cur_indices = self.epoch_indices[sample_index:sample_index + self.batch_size]
+        images = self.images[cur_indices]
+        captions = self.captions[cur_indices]
         if self.sample_pos:
             pos_samples = np.random.randint(0, 5, self.batch_size)
-            captions = self.captions[sample_index:sample_index + self.batch_size, pos_samples]
+            captions = self.captions[:, pos_samples]
         else:
-            captions = self.captions[sample_index:sample_index + self.batch_size, 0]
+            captions = self.captions[:, 0]
         # Processing captions
         inputs = self.tokenizer.batch_encode_plus(
             captions,

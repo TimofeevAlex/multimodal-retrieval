@@ -19,7 +19,7 @@ def compute_ranks_i2t(sims, start_index, npts):
             ranks[index, i]  = rank
         # top1[index] = inds[0]
 
-    return ranks
+    return ranks.astype(int)
 
 
 def compute_ranks_t2i(sims, start_index, npts):
@@ -31,7 +31,7 @@ def compute_ranks_t2i(sims, start_index, npts):
         ranks[index] = np.where(inds == start_index + (index // 5))[0][0]
          # top1[5 * index + i] = inds[0]
 
-    return ranks
+    return ranks.astype(int)
 
 
 def compute_metrics(ranks, num_relevants):
@@ -77,7 +77,7 @@ def test_i2t(image_embedder, text_embedder, loader, device):
     num_captions = loader.dataset.num_captions
     iters_per_image_batch = (num_captions // batch_size) - 1
     start = time()
-    image_ranks = np.array([])
+    image_ranks = np.array([]).astype(int)
     with torch.no_grad():
         for idx, data in enumerate(loader):
             if idx % iters_per_image_batch == 0:
@@ -130,7 +130,7 @@ def test_t2i(image_embedder, text_embedder, loader, device):
     num_images = loader.dataset.num_images
     iters_per_image_batch = (num_images // batch_size) - 1
     start = time()
-    text_ranks = np.array([])
+    text_ranks = np.array([]).astype(int)
     with torch.no_grad():
         for idx, data in enumerate(loader):
             if idx  % iters_per_image_batch == 0:
@@ -177,10 +177,10 @@ def test(image_embedder, text_embedder, loader_t2i, loader_i2t, device):
     metrics_val_t2i = test_t2i(image_embedder, text_embedder, loader_t2i, device)
     metrics_val_i2t = test_i2t(image_embedder, text_embedder, loader_i2t, device)
     final_metrics_t2i = " | ".join(
-        ["{}: {:.3f}".format(name, metrics_t2i[name]) for name in metrics_t2i]
+        ["{}: {:.3f}".format(name, metrics_val_t2i[name]) for name in metrics_val_t2i]
     )
     final_metrics_i2t = " | ".join(
-        ["{}: {:.3f}".format(name, metrics_i2t[name]) for name in metrics_i2t]
+        ["{}: {:.3f}".format(name, metrics_val_i2t[name]) for name in metrics_val_i2t]
     )
     print("Final TEST metrics")
     print('T2I | ' + final_metrics_t2i)
