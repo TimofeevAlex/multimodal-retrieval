@@ -118,7 +118,7 @@ class ImgCaptLoader(Dataset):
         cur_indices = self.epoch_indices[sample_index:sample_index + self.batch_size]
         images = self.images[cur_indices]
         if self.sample_pos:
-            pos_samples = np.random.randint(0, 5, self.batch_size)
+            pos_samples = np.random.randint(0, 5, len(cur_indices))
             captions = self.captions[cur_indices, pos_samples]
         else:
             captions = self.captions[cur_indices, 0]
