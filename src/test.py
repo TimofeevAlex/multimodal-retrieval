@@ -14,10 +14,13 @@ def compute_ranks_i2t(sims, start_index, npts):
         inds = torch.flip(np.argsort(sims[index]), [0])
 
         # Score
+        rank = 1e20            
         for i, true_ind in enumerate(range(start_index + 5 * index, start_index + 5 * index + 5, 1)):
             rank = np.where(inds == true_ind)[0][0]
-            ranks[index, i]  = rank
-        # top1[index] = inds[0]
+            tmp = np.where(inds == i)[0][0]
+            if tmp < rank:
+                rank = tmp
+        ranks[index] = rank
 
     return ranks.astype(int)
 
@@ -34,20 +37,19 @@ def compute_ranks_t2i(sims, start_index, npts):
     return ranks.astype(int)
 
 
-def compute_metrics(ranks, num_relevants):
-    if num_relevants == 1:
-        ranks = np.expand_dims(ranks, -1)
-    num_samples = ranks.shape[0]
-    r1 = 100.0 * (ranks < 1).sum() / num_samples / num_relevants
-    r5 = 100.0 * (ranks < 5).sum() / num_samples / num_relevants
-    r10 = 100.0 * (ranks < 10).sum() / num_samples / num_relevants
-    medr = np.floor(np.median(ranks.min(1))) + 1
-    meanr = ranks.min(1).mean() + 1
+def compute_metrics(ranks):
+    # if num_relevants == 1:
+    #     ranks = np.expand_dims(ranks, -1)
+    r1 = 100.0 * len(np.where(ranks < 1)[0]) / len(ranks)
+    r5 = 100.0 * len(np.where(ranks < 5)[0]) / len(ranks)
+    r10 = 100.0 * len(np.where(ranks < 10)[0]) / len(ranks)
+    medr = np.floor(np.median(ranks)) + 1
+    meanr = ranks.mean() + 1
     return r1, r5, r10, medr, meanr
 
 
 def metrics_i2t(ranks):
-    r1, r5, r10, medr, meanr = compute_metrics(ranks, 5)
+    r1, r5, r10, medr, meanr = compute_metrics(ranks)
     return {
         "i2t_meanr": meanr,
         "i2t_medr": medr,
@@ -58,7 +60,7 @@ def metrics_i2t(ranks):
 
 
 def metrics_t2i(ranks):
-    r1, r5, r10, medr, meanr = compute_metrics(ranks, 1)
+    r1, r5, r10, medr, meanr = compute_metrics(ranks)
     return {
         "t2i_meanr": meanr,
         "t2i_medr": medr,
@@ -117,7 +119,7 @@ def test_i2t(image_embedder, text_embedder, loader, device):
                 )
             )
             start += curr_iter
-    metrics = metrics_i2t(image_ranks.reshape((-1, 5)))
+    metrics = metrics_i2t(image_ranks)  
     return metrics
 
 
