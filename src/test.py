@@ -37,9 +37,10 @@ def compute_ranks_t2i(sims, start_index, npts):
 def compute_metrics(ranks, num_relevants):
     if num_relevants == 1:
         ranks = np.expand_dims(ranks, -1)
-    r1 = 100.0 * np.mean((ranks < 1).sum(1) / num_relevants)
-    r5 = 100.0 * np.mean((ranks < 5).sum(1) / num_relevants)
-    r10 = 100.0 * np.mean((ranks < 10).sum(1) / num_relevants)
+    num_samples = ranks.shape[0]
+    r1 = 100.0 * (ranks < 1).sum() / num_samples / num_relevants
+    r5 = 100.0 * (ranks < 5).sum() / num_samples / num_relevants
+    r10 = 100.0 * (ranks < 10).sum() / num_samples / num_relevants
     medr = np.floor(np.median(ranks.min(1))) + 1
     meanr = ranks.min(1).mean() + 1
     return r1, r5, r10, medr, meanr
