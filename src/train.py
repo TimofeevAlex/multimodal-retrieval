@@ -8,10 +8,24 @@ from src.utils import AverageMeter
 
 
 def train_one_epoch(
-    epoch, image_embedder, text_embedder, loss_fn, loader, optimizer, device
+    epoch,
+    image_embedder,
+    text_embedder,
+    loss_fn,
+    loader,
+    optimizer,
+    device,
+    TRAINABLE_CV,
+    TRAINABLE_TEXT,
 ):
-    image_embedder.eval()
-    text_embedder.train()
+    if TRAINABLE_CV == None:
+        image_embedder.eval()
+    else:
+        image_embedder.train()
+    if TRAINABLE_TEXT == None:
+        text_embedder.eval()
+    else:
+        text_embedder.train()   
     loss_meter = AverageMeter()
     time_meter = AverageMeter()
     len_ = len(loader)
