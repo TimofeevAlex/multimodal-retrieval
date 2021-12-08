@@ -28,11 +28,11 @@ class DistilBERT(nn.Module):
         return text_embeddings
 
 
-class ResNet50(nn.Module):
+class ResNet(nn.Module):
     def __init__(self, finetune=None, embedding_size=768):
-        super(ResNet50, self).__init__()
+        super(ResNet, self).__init__()
         self._finetune = finetune
-        self.resnet = models.resnet50(pretrained=True)
+        self.resnet = models.resnet32(pretrained=True)
 
         for parameter in self.resnet.parameters():
             parameter.requires_grad = (finetune == "all")

@@ -73,7 +73,7 @@ def run_train(
     text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=512).to(
         device
     )
-    image_embedder = model.ResNet50(finetune=TRAINABLE_CV, embedding_size=512).to(
+    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=512).to(
         device
     )
 
@@ -192,7 +192,7 @@ def read_embedders(path_cv, path_text, TRAINABLE_CV, TRAINABLE_TEXT):
         device
     )
     text_embedder.load_state_dict(torch.load(path_text))
-    image_embedder = model.ResNet50(finetune=TRAINABLE_CV, embedding_size=512).to(
+    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=512).to(
         device
     )
     text_embedder.load_state_dict(torch.load(path_cv))
