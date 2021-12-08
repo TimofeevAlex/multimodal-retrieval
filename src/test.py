@@ -15,8 +15,7 @@ def compute_ranks_i2t(sims, start_index, npts):
 
         # Score
         rank = 1e20            
-        for i, true_ind in enumerate(range(start_index + 5 * index, start_index + 5 * index + 5, 1)):
-            rank = np.where(inds == true_ind)[0][0]
+        for i in range(start_index + 5 * index, start_index + 5 * index + 5, 1):
             tmp = np.where(inds == i)[0][0]
             if tmp < rank:
                 rank = tmp
