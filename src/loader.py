@@ -28,7 +28,7 @@ def get_transform(split_name):
 
 
 class ImgCaptSetLoader(Dataset):
-    def __init__(self, dataset, tokenizer, max_len, batch_size=5, num_images=10, i2t=True):
+    def __init__(self, dataset, tokenizer, max_len, batch_size=250, num_images=5000, i2t=True):
         assert num_images % batch_size == 0
         assert batch_size % 5 == 0
         self.tokenizer = tokenizer

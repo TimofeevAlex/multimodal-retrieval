@@ -168,8 +168,8 @@ def run_test(
     text_embedder,
     writer,
 ):
-    im_dir = osp.join(DATA_DIRECTORY, "train2014")
-    annot_val = osp.join("annotations", "captions_train2014.json")
+    im_dir = osp.join(DATA_DIRECTORY, "val2014")
+    annot_val = osp.join("annotations", "captions_val2014.json")
     cap_file = osp.join(DATA_DIRECTORY, annot_val)
 
     print("Running evaluations")
