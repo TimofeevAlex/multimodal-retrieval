@@ -4,6 +4,8 @@ import os.path as osp
 import sys
 from datetime import datetime
 
+import random
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision.datasets as dset
@@ -13,6 +15,12 @@ from torch.optim.lr_scheduler import MultiStepLR, CosineAnnealingLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from transformers import DistilBertTokenizerFast
+
+# Fix seeds
+seed = 7
+torch.manual_seed(seed)
+random.seed(0)
+np.random.seed(0)
 
 device = "cuda" if cuda.is_available() else "cpu"
 
@@ -136,15 +144,15 @@ def run_train(
         if loss_val <= best_val_loss:
             best_val_loss = loss_val
             best_epoch = epoch
-            # Save the model
-            torch.save(
-                text_embedder.state_dict(),
-                osp.join(models_dir, f"text_embedder_{epoch}"),
-            )
-            torch.save(
-                text_embedder.state_dict(),
-                osp.join(models_dir, f"image_embedder_{epoch}"),
-            )
+        # Save the model
+        torch.save(
+            text_embedder.state_dict(),
+            osp.join(models_dir, f"text_embedder_{epoch}"),
+        )
+        torch.save(
+            text_embedder.state_dict(),
+            osp.join(models_dir, f"image_embedder_{epoch}"),
+        )
     # Upload the best model weights
     best_text_model_path = osp.join(models_dir, f"text_embedder_{best_epoch}")
     best_image_model_path = osp.join(models_dir, f"image_embedder_{best_epoch}")
@@ -160,8 +168,8 @@ def run_test(
     text_embedder,
     writer,
 ):
-    im_dir = osp.join(DATA_DIRECTORY, "val2014")
-    annot_val = osp.join("annotations", "captions_val2014.json")
+    im_dir = osp.join(DATA_DIRECTORY, "train2014")
+    annot_val = osp.join("annotations", "captions_train2014.json")
     cap_file = osp.join(DATA_DIRECTORY, annot_val)
 
     print("Running evaluations")

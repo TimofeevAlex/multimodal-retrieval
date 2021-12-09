@@ -65,5 +65,5 @@ class SimCLRLoss(nn.Module):
         image_term = torch.log(pos_sim / neg_sim.sum(0))
         text_term = torch.log(pos_sim / neg_sim.T.sum(0))
 
-        loss = torch.mean(-image_term - text_term)
+        loss = -torch.mean(image_term + text_term)
         return loss

@@ -28,12 +28,14 @@ def get_transform(split_name):
 
 
 class ImgCaptSetLoader(Dataset):
-    def __init__(self, dataset, tokenizer, max_len, batch_size=250, num_images=5000, i2t=True):
+    def __init__(self, dataset, tokenizer, max_len, batch_size=5, num_images=10, i2t=True):
         assert num_images % batch_size == 0
+        assert batch_size % 5 == 0
         self.tokenizer = tokenizer
         self.coco_dataset = dataset
         self.max_len = max_len
-        self.batch_size = batch_size
+        self.c_batch_size = batch_size
+        self.i_batch_size = batch_size // 5 
         self.num_images = num_images
         self.num_captions = num_images * 5
         self.i2t = i2t
@@ -48,21 +50,21 @@ class ImgCaptSetLoader(Dataset):
             self.captions.extend(cap[:5])
 
     def __len__(self):
-        return math.ceil(self.num_captions * self.num_images / self.batch_size ** 2) 
+        return math.ceil((self.num_captions / self.c_batch_size) * (self.num_images / self.i_batch_size)) 
 
     def __getitem__(self, index):
         # Prepare indices
         if self.i2t:
-            sample_index = self.batch_size * index
-            caption_index = sample_index % self.num_captions
-            image_index = (sample_index // self.num_captions) * self.batch_size
+            caption_index = self.c_batch_size * index
+            image_index = (caption_index // self.num_captions) * self.i_batch_size
+            caption_index = caption_index % self.num_captions
         else:
-            sample_index = self.batch_size * index
-            image_index = sample_index % self.num_images
-            caption_index = (sample_index // self.num_images) * self.batch_size
+            image_index = self.i_batch_size * index
+            caption_index = (image_index // self.num_images) * self.c_batch_size
+            image_index = image_index % self.num_images
         # Get this batch of images
-        images = self.images[image_index:image_index + self.batch_size]
-        captions = self.captions[caption_index:caption_index + self.batch_size]
+        images = self.images[image_index:image_index + self.i_batch_size]
+        captions = self.captions[caption_index:caption_index + self.c_batch_size]
         # Processing captions
         inputs = self.tokenizer.batch_encode_plus(
             captions,

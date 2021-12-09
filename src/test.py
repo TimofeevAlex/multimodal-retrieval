@@ -6,31 +6,48 @@ import torch.nn.functional as F
 from src.utils import AverageMeter
 
 
-def compute_ranks_i2t(sims, start_index, npts):
-    ranks = np.zeros((npts, 5))
+def compute_ranks_i2t(sims, start_index):
+    npts = sims.shape[0]
+    ranks = np.zeros(npts)
     # top1 = np.zeros(npts)
-
     for index in range(npts):
         inds = torch.flip(np.argsort(sims[index]), [0])
 
         # Score
         rank = 1e20            
-        for i in range(start_index + 5 * index, start_index + 5 * index + 5, 1):
+        for i in range(start_index + 5 * index, start_index + 5 * index + 5):
             tmp = np.where(inds == i)[0][0]
             if tmp < rank:
                 rank = tmp
         ranks[index] = rank
-
+        # print('PRED:', 
+        #       inds[0], 
+        #       'TRUE:', 
+        #       f'{start_index + 5 * index}, {start_index + 5 * index + 5}', 
+        #       inds[0] in range(start_index + 5 * index, start_index + 5 * index + 5),
+        #       'where true:',
+        #       np.where(inds == i0)[0][0]
+        # )
     return ranks.astype(int)
 
 
-def compute_ranks_t2i(sims, start_index, npts):
+def compute_ranks_t2i(sims, start_index):
+    npts = sims.shape[0]
     ranks = np.zeros(npts)
     # top1 = np.zeros(5 * npts)
 
     for index in range(npts):
         inds = torch.flip(np.argsort(sims[index]), [0])
         ranks[index] = np.where(inds == start_index + (index // 5))[0][0]
+        # print('PRED:', 
+        #         inds[0], 
+        #         'TRUE:', 
+        #         f'{start_index + (index // 5)}',
+        #         inds[0] == start_index + (index // 5),
+        #         'where true:',
+        #         np.where(inds == start_index + (index // 5))[0][0]
+        # )
+        
          # top1[5 * index + i] = inds[0]
 
     return ranks.astype(int)
@@ -75,22 +92,16 @@ def test_i2t(image_embedder, text_embedder, loader, device):
 
     time_meter = AverageMeter()
     len_ = len(loader)
-    batch_size = loader.dataset.batch_size
+    i_batch_size = loader.dataset.i_batch_size
+    c_batch_size = loader.dataset.c_batch_size
     num_captions = loader.dataset.num_captions
-    iters_per_image_batch = (num_captions // batch_size) - 1
+    freq = (num_captions // c_batch_size)
     start = time()
     image_ranks = np.array([]).astype(int)
     with torch.no_grad():
         for idx, data in enumerate(loader):
-            if idx % iters_per_image_batch == 0:
-                if idx != 0:
-                    # Store ranks for current
-                    start_index = ((idx * batch_size) // num_captions) * batch_size
-                    batch_image_ranks = compute_ranks_i2t(
-                        sim_matrix, start_index, batch_size
-                    )
-                    image_ranks = np.append(image_ranks, batch_image_ranks)
-                sim_matrix = torch.empty((batch_size, num_captions)).cpu()
+            if idx % freq == 0:
+                sim_matrix = torch.empty((i_batch_size, num_captions)).cpu()
                 # Extract images
                 input_images = data["image"][0].to(device)
                 image_embeds = image_embedder(input_images)
@@ -102,10 +113,18 @@ def test_i2t(image_embedder, text_embedder, loader, device):
             text_embeds = text_embedder(ids[0], masks[0])
             text_embeds_norm = F.normalize(text_embeds, dim=1)
             # Batch similarities
-            sample_index = (idx * batch_size) % num_captions
-            sim_matrix[:, sample_index:sample_index + batch_size] = torch.mm(
+            sample_index = (idx * c_batch_size) % num_captions
+            sim_matrix[:, sample_index:sample_index + c_batch_size] = torch.mm(
                 image_embeds_norm, text_embeds_norm.T
             ).cpu()
+            # Rank computing
+            if (idx + 1) % freq == 0:
+                # Store ranks for current
+                start_index = ((idx * c_batch_size) // num_captions) * c_batch_size
+                batch_image_ranks = compute_ranks_i2t(
+                    sim_matrix, start_index
+                )
+                image_ranks = np.append(image_ranks, batch_image_ranks)
             # Logging
             curr_iter = time() - start
             time_meter.update(time() - start)
@@ -128,22 +147,17 @@ def test_t2i(image_embedder, text_embedder, loader, device):
 
     time_meter = AverageMeter()
     len_ = len(loader)
-    batch_size = loader.dataset.batch_size
+    i_batch_size = loader.dataset.i_batch_size
+    c_batch_size = loader.dataset.c_batch_size
     num_images = loader.dataset.num_images
-    iters_per_image_batch = (num_images // batch_size) - 1
+    freq = num_images // i_batch_size
     start = time()
+    
     text_ranks = np.array([]).astype(int)
     with torch.no_grad():
         for idx, data in enumerate(loader):
-            if idx  % iters_per_image_batch == 0:
-                if idx != 0:
-                    # Store ranks for current
-                    start_index = ((idx * batch_size) // num_images) * batch_size / 5
-                    batch_text_ranks = compute_ranks_t2i(
-                        sim_matrix, start_index, batch_size
-                    )
-                    text_ranks = np.append(text_ranks, batch_text_ranks)
-                sim_matrix = torch.empty((batch_size, num_images)).cpu()
+            if idx  % freq == 0:
+                sim_matrix = torch.empty((c_batch_size, num_images)).cpu()
                 # Extract captions
                 ids = data["ids"].to(device)
                 masks = data["mask"].to(device)
@@ -155,10 +169,18 @@ def test_t2i(image_embedder, text_embedder, loader, device):
             image_embeds = image_embedder(input_images)
             image_embeds_norm = F.normalize(image_embeds, dim=1)
             # Batch similarities
-            sample_index = (idx * batch_size) % num_images
-            sim_matrix[:, sample_index:sample_index + batch_size] = torch.mm(
+            sample_index = (idx * i_batch_size) % num_images
+            sim_matrix[:, sample_index:sample_index + i_batch_size] = torch.mm(
                 text_embeds_norm, image_embeds_norm.T
             ).cpu()
+            # Rank computing
+            if (idx + 1)  % freq == 0:
+                # Store ranks for current
+                start_index = ((idx * i_batch_size) // num_images) * i_batch_size
+                batch_text_ranks = compute_ranks_t2i(
+                    sim_matrix, start_index
+                )
+                text_ranks = np.append(text_ranks, batch_text_ranks)
             # Logging
             curr_iter = time() - start
             time_meter.update(time() - start)
