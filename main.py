@@ -101,8 +101,8 @@ def run_train(
     optimizer = torch.optim.Adam(
         params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
-    # scheduler = MultiStepLR(optimizer, milestones=[15], gamma=0.1)
-    scheduler = CosineAnnealingLR(optimizer, len(train_loader))
+    scheduler = MultiStepLR(optimizer, milestones=[20,40], gamma=0.1)
+    # scheduler = CosineAnnealingLR(optimizer, len(train_loader))
 
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
@@ -150,7 +150,7 @@ def run_train(
             osp.join(models_dir, f"text_embedder_{epoch}"),
         )
         torch.save(
-            text_embedder.state_dict(),
+            image_embedder.state_dict(),
             osp.join(models_dir, f"image_embedder_{epoch}"),
         )
     # Upload the best model weights
