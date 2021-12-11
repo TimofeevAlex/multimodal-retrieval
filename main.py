@@ -104,13 +104,13 @@ def run_train(
     optimizer = torch.optim.Adam(
         params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
-    scheduler = MultiStepLR(optimizer, milestones=[20,40], gamma=0.1)
+    scheduler = MultiStepLR(optimizer, milestones=[100], gamma=0.1)
     # scheduler = CosineAnnealingLR(optimizer, len(train_loader))
 
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
         OUTPUT_DIRECTORY,
-        f"_{LOSS}_{LEARNING_RATE}_"
+        f"_{LOSS}_{LEARNING_RATE}_{WEIGHT_DECAY}_{TRAINABLE_CV}_{TRAINABLE_TEXT}"
         + str(datetime.now()).split(".")[0].replace(" ", "_"),
     )
     create_dir(models_dir)
@@ -206,7 +206,7 @@ def read_embedders(path_cv, path_text, TRAINABLE_CV, TRAINABLE_TEXT, EMBEDDING_S
     image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE).to(
         device
     )
-    text_embedder.load_state_dict(torch.load(path_cv))
+    image_embedder.load_state_dict(torch.load(path_cv))
     return image_embedder, text_embedder
 
 
@@ -288,8 +288,8 @@ def main() -> None:
     log_dir = "logs"
     create_dir(log_dir)
     # Run training or load models for testing
-    if (options.CV_DIR == "") or (options.CV_DIR == ""):
-        exp_name = f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
+    if (options.CV_DIR == "") or (options.TEXT_DIR == ""):
+        exp_name = f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{now}"
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = run_train(
             options.DATA_DIRECTORY,
@@ -306,7 +306,7 @@ def main() -> None:
             options.EMBEDDING_SIZE
         )
     else:
-        exp_name = f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
+        exp_name = f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{now}"
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = read_embedders(
             options.CV_DIR,
