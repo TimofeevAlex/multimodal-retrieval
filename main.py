@@ -285,7 +285,7 @@ def main() -> None:
     create_dir(log_dir)
     # Run training or load models for testing
     if (options.CV_DIR == "") or (options.TEXT_DIR == ""):
-        exp_name = f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
+        exp_name = f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{now}"
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = run_train(
             options.DATA_DIRECTORY,
@@ -301,7 +301,7 @@ def main() -> None:
             writer,
         )
     else:
-        exp_name = f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
+        exp_name = f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{now}"
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = read_embedders(
             options.CV_DIR,
