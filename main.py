@@ -78,10 +78,10 @@ def run_train(
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=512).to(
+    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=128).to(
         device
     )
-    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=512).to(
+    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=128).to(
         device
     )
 
@@ -101,13 +101,13 @@ def run_train(
     optimizer = torch.optim.Adam(
         params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
-    scheduler = MultiStepLR(optimizer, milestones=[20,40], gamma=0.1)
+    scheduler = MultiStepLR(optimizer, milestones=[100], gamma=0.1)
     # scheduler = CosineAnnealingLR(optimizer, len(train_loader))
 
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
         OUTPUT_DIRECTORY,
-        f"_{LOSS}_{LEARNING_RATE}_"
+        f"_{LOSS}_{LEARNING_RATE}_{WEIGHT_DECAY}_{TRAINABLE_CV}_{TRAINABLE_TEXT}"
         + str(datetime.now()).split(".")[0].replace(" ", "_"),
     )
     create_dir(models_dir)
@@ -196,14 +196,14 @@ def run_test(
 
 def read_embedders(path_cv, path_text, TRAINABLE_CV, TRAINABLE_TEXT):
     print("Loading models from input directory")
-    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=512).to(
+    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=128).to(
         device
     )
     text_embedder.load_state_dict(torch.load(path_text))
-    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=512).to(
+    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=128).to(
         device
     )
-    text_embedder.load_state_dict(torch.load(path_cv))
+    image_embedder.load_state_dict(torch.load(path_cv))
     return image_embedder, text_embedder
 
 
@@ -284,7 +284,7 @@ def main() -> None:
     log_dir = "logs"
     create_dir(log_dir)
     # Run training or load models for testing
-    if (options.CV_DIR == "") or (options.CV_DIR == ""):
+    if (options.CV_DIR == "") or (options.TEXT_DIR == ""):
         exp_name = f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = run_train(
