@@ -25,6 +25,20 @@ np.random.seed(0)
 device = "cuda" if cuda.is_available() else "cpu"
 
 
+def adjust_learning_rate(optimizer, epoch, init_lr):
+    epoch = epoch + 1
+    if epoch <= 5:
+        lr = init_lr * epoch / 5
+    # elif epoch > 180:
+    #     lr = init_lr * 0.0001
+    # elif epoch > 160:
+    #     lr = init_lr * 0.01
+    else:
+        lr = init_lr
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+
 def run_train(
     DATA_DIRECTORY,
     MAX_LEN,
@@ -38,6 +52,7 @@ def run_train(
     TRAINABLE_TEXT,
     writer,
     EMBEDDING_SIZE,
+    SCHEDULER
 ):
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
@@ -104,13 +119,22 @@ def run_train(
     optimizer = torch.optim.Adam(
         params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
-    scheduler = MultiStepLR(optimizer, milestones=[100], gamma=0.1)
-    # scheduler = CosineAnnealingLR(optimizer, len(train_loader))
+    
+    if SCHEDULER == 'MultiStep':
+        scheduler = MultiStepLR(optimizer, milestones=[100], gamma=0.1)
+    elif SCHEDULER == 'CosineAnnealing':
+        scheduler = CosineAnnealingLR(optimizer, len(train_loader))
+    elif SCHEDULER == 'GradualWarmup':
+        scheduler = None
+    else:
+        raise ValueError('Only MultiStep, CosineAnnealing, or GradualWarmup schedulers are acceptable')
+        
 
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
         OUTPUT_DIRECTORY,
-        f"{LOSS}_{LEARNING_RATE}_{WEIGHT_DECAY}_{EMBEDDING_SIZE}_{TRAINABLE_CV}_{TRAINABLE_TEXT}"
+        f"{LOSS}_{LEARNING_RATE}_{WEIGHT_DECAY}_{EMBEDDING_SIZE}"
+        +f"_{SCHEDULER}_{TRAINABLE_CV}_{TRAINABLE_TEXT}"
         + str(datetime.now()).split(".")[0].replace(" ", "_"),
     )
     create_dir(models_dir)
@@ -119,6 +143,8 @@ def run_train(
     best_epoch = 0
     best_val_loss = int(sys.maxsize)
     for epoch in range(EPOCHS):
+        if SCHEDULER == 'GradualWarmup':
+            adjust_learning_rate(optimizer, epoch, LEARNING_RATE)
         # train one epoch
         loss_tr = train.train_one_epoch(
             epoch,
@@ -143,7 +169,8 @@ def run_train(
         )
         # Add metrics to tensorboard
         writer.add_scalars("loss", {"train": loss_tr, "val": loss_val}, epoch)
-        scheduler.step()
+        if SCHEDULER != 'GradualWarmup':
+            scheduler.step()
         if loss_val <= best_val_loss:
             best_val_loss = loss_val
             best_epoch = epoch
@@ -249,6 +276,7 @@ def main() -> None:
     parser.add_argument("--TRAINABLE_CV", type=str, default="all")
     parser.add_argument("--TRAINABLE_TEXT", type=str, default="all")
     parser.add_argument("--EMBEDDING_SIZE", type=int, default=128)
+    parser.add_argument("--SCHEDULER", type=str, default='MultiStep')
 
     options = parser.parse_args()
 
@@ -290,7 +318,7 @@ def main() -> None:
     # Run training or load models for testing
     if (options.CV_DIR == "") or (options.TEXT_DIR == ""):
         exp_name = (
-            f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}"
+            f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.SCHEDULER}"
             + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{now}"
         )
         writer = SummaryWriter(osp.join(log_dir, exp_name))
@@ -307,10 +335,11 @@ def main() -> None:
             options.TRAINABLE_TEXT,
             writer,
             options.EMBEDDING_SIZE,
+            options.SCHEDULER
         )
     else:
         exp_name = (
-            f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}"
+            f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.SCHEDULER}"
             + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{now}"
         )
         writer = SummaryWriter(osp.join(log_dir, exp_name))
