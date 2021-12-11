@@ -37,7 +37,7 @@ def run_train(
     TRAINABLE_CV,
     TRAINABLE_TEXT,
     writer,
-    EMBEDDING_SIZE
+    EMBEDDING_SIZE,
 ):
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
@@ -79,12 +79,12 @@ def run_train(
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE).to(
-        device
-    )
-    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE).to(
-        device
-    )
+    text_embedder = model.DistilBERT(
+        finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE
+    ).to(device)
+    image_embedder = model.ResNet(
+        finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE
+    ).to(device)
 
     # Define loss function
     if LOSS == "triplet":
@@ -110,7 +110,7 @@ def run_train(
     create_dir(OUTPUT_DIRECTORY)
     models_dir = osp.join(
         OUTPUT_DIRECTORY,
-        f"_{LOSS}_{LEARNING_RATE}_{WEIGHT_DECAY}_{TRAINABLE_CV}_{TRAINABLE_TEXT}"
+        f"{LOSS}_{LEARNING_RATE}_{WEIGHT_DECAY}_{EMBEDDING_SIZE}_{TRAINABLE_CV}_{TRAINABLE_TEXT}"
         + str(datetime.now()).split(".")[0].replace(" ", "_"),
     )
     create_dir(models_dir)
@@ -199,13 +199,13 @@ def run_test(
 
 def read_embedders(path_cv, path_text, TRAINABLE_CV, TRAINABLE_TEXT, EMBEDDING_SIZE):
     print("Loading models from input directory")
-    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE).to(
-        device
-    )
+    text_embedder = model.DistilBERT(
+        finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE
+    ).to(device)
     text_embedder.load_state_dict(torch.load(path_text))
-    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE).to(
-        device
-    )
+    image_embedder = model.ResNet(
+        finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE
+    ).to(device)
     image_embedder.load_state_dict(torch.load(path_cv))
     return image_embedder, text_embedder
 
@@ -289,7 +289,10 @@ def main() -> None:
     create_dir(log_dir)
     # Run training or load models for testing
     if (options.CV_DIR == "") or (options.TEXT_DIR == ""):
-        exp_name = f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{now}"
+        exp_name = (
+            f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}"
+            + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{now}"
+        )
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = run_train(
             options.DATA_DIRECTORY,
@@ -303,17 +306,20 @@ def main() -> None:
             options.TRAINABLE_CV,
             options.TRAINABLE_TEXT,
             writer,
-            options.EMBEDDING_SIZE
+            options.EMBEDDING_SIZE,
         )
     else:
-        exp_name = f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{now}"
+        exp_name = (
+            f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}"
+            + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{now}"
+        )
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = read_embedders(
             options.CV_DIR,
             options.TEXT_DIR,
             options.TRAINABLE_CV,
             options.TRAINABLE_TEXT,
-            options.EMBEDDING_SIZE
+            options.EMBEDDING_SIZE,
         )
 
     # Test trained models
