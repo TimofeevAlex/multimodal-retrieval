@@ -67,3 +67,29 @@ class SimCLRLoss(nn.Module):
 
         loss = -torch.mean(image_term + text_term)
         return loss
+
+
+class BarlowTwins(nn.Module):
+    def __init__(self, embedding_size, lambd=5e-3):
+        super().__init__()
+        # normalization layer for the representations image_embeds and text_embeds
+        self.bn = nn.BatchNorm1d(embedding_size, affine=False)
+        self.lambd = lambd
+    
+    @staticmethod
+    def off_diagonal(x):
+        # return a flattened view of the off-diagonal elements of a square matrix
+        n, m = x.shape
+        assert n == m
+        return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
+
+    def forward(self, image_embeds, text_embeds):
+        batch_size = image_embeds.shape[0]
+        # empirical cross-correlation matrix
+        sim_matrix = self.bn(image_embeds).T @ self.bn(text_embeds)
+        # sum the cross-correlation matrix between all gpus
+        sim_matrix.div_(batch_size)
+        on_diag = torch.diagonal(sim_matrix).add_(-1).pow_(2).sum()
+        off_diag = off_diagonal(sim_matrix).pow_(2).sum()
+        loss = on_diag + self.lambd * off_diag
+        return loss

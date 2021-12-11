@@ -37,6 +37,7 @@ def run_train(
     TRAINABLE_CV,
     TRAINABLE_TEXT,
     writer,
+    EMBEDDING_SIZE
 ):
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
@@ -78,10 +79,10 @@ def run_train(
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=512).to(
+    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE).to(
         device
     )
-    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=512).to(
+    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE).to(
         device
     )
 
@@ -92,6 +93,8 @@ def run_train(
         ).to(device)
     elif LOSS == "SimCLR":
         loss_fn = loss.SimCLRLoss(temp=0.07, device=device).to(device)
+    elif LOSS == "BarlowTwins":
+        loss_fn = loss.BarlowTwins(embedding_size=EMBEDDING_SIZE)
     else:
         raise ValueError("Loss can be triplet/SimCLR")
 
@@ -194,13 +197,13 @@ def run_test(
     writer.add_scalars("metrics/i2t", metrics_i2t)
 
 
-def read_embedders(path_cv, path_text, TRAINABLE_CV, TRAINABLE_TEXT):
+def read_embedders(path_cv, path_text, TRAINABLE_CV, TRAINABLE_TEXT, EMBEDDING_SIZE):
     print("Loading models from input directory")
-    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=512).to(
+    text_embedder = model.DistilBERT(finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE).to(
         device
     )
     text_embedder.load_state_dict(torch.load(path_text))
-    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=512).to(
+    image_embedder = model.ResNet(finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE).to(
         device
     )
     text_embedder.load_state_dict(torch.load(path_cv))
@@ -245,6 +248,7 @@ def main() -> None:
     parser.add_argument("--LOSS", type=str, default="triplet")
     parser.add_argument("--TRAINABLE_CV", type=str, default="all")
     parser.add_argument("--TRAINABLE_TEXT", type=str, default="all")
+    parser.add_argument("--EMBEDDING_SIZE", type=int, default=128)
 
     options = parser.parse_args()
 
@@ -299,6 +303,7 @@ def main() -> None:
             options.TRAINABLE_CV,
             options.TRAINABLE_TEXT,
             writer,
+            options.EMBEDDING_SIZE
         )
     else:
         exp_name = f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.BATCH_SIZE}_{now}"
@@ -307,7 +312,8 @@ def main() -> None:
             options.CV_DIR,
             options.TEXT_DIR,
             options.TRAINABLE_CV,
-            options.TRAINABLE_TEXT
+            options.TRAINABLE_TEXT,
+            options.EMBEDDING_SIZE
         )
 
     # Test trained models
@@ -316,7 +322,7 @@ def main() -> None:
         options.MAX_LEN,
         image_embedder,
         text_embedder,
-        writer
+        writer,
     )
     writer.close()
 
