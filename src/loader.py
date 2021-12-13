@@ -116,6 +116,7 @@ class ImgCaptLoader(Dataset):
     def __getitem__(self, index): 
         if self.shuffle and (index == 0):
             self.epoch_indices = np.random.permutation(self.epoch_indices)
+            print(self.epoch_indices)
         sample_index = index * self.batch_size
         cur_indices = self.epoch_indices[sample_index:sample_index + self.batch_size]
         images = self.images[cur_indices]
@@ -144,6 +145,36 @@ class ImgCaptLoader(Dataset):
         }
 
 
+if __name__ == '__main__':
+    import os.path as osp
+    import torchvision.datasets as dset
+    from transformers import DistilBertTokenizerFast
+    from torch.utils.data import DataLoader
+    DATA_DIRECTORY = 'dataset'
+    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+    annot_train = osp.join("annotations", "captions_train2014.json")
+    # Define train loader
+    tr_dataset = dset.CocoCaptions(
+        root=osp.join(DATA_DIRECTORY, "train2014"),
+        annFile=osp.join(DATA_DIRECTORY, annot_train),
+        transform=get_transform("train"),
+    )
+    params = {"batch_size": 1, "shuffle": True}
+    len_ = len(tr_dataset)
+    train_size = len_ - 5000
+    indices = torch.arange(train_size)
+    train_dataset = ImgCaptLoader(
+        tr_dataset,
+        tokenizer,
+        32,
+        64,
+        indices=indices,
+        sample_pos=True,
+        shuffle=True,
+    )
+    # train_dataset = torch.utils.data.Subset(
+    #     train_dataset, torch.arange(train_size))
+    train_loader = DataLoader(train_dataset, **params)
 
 # class ImgCaptLoader(Dataset):
 #     def __init__(self, dataset, tokenizer, max_len):
