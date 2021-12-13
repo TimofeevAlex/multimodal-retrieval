@@ -160,8 +160,7 @@ if __name__ == '__main__':
         transform=get_transform("train"),
     )
     params = {"batch_size": 1, "shuffle": True}
-    len_ = len(tr_dataset)
-    train_size = len_ - 5000
+    train_size = 1000
     indices = torch.arange(train_size)
     train_dataset = ImgCaptLoader(
         tr_dataset,
@@ -175,7 +174,9 @@ if __name__ == '__main__':
     # train_dataset = torch.utils.data.Subset(
     #     train_dataset, torch.arange(train_size))
     train_loader = DataLoader(train_dataset, **params)
-
+    for epoch in range(5):
+        for batch in train_loader:
+            pass
 # class ImgCaptLoader(Dataset):
 #     def __init__(self, dataset, tokenizer, max_len):
 #         self.tokenizer = tokenizer
