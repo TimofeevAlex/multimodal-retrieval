@@ -116,7 +116,6 @@ class ImgCaptLoader(Dataset):
     def __getitem__(self, index): 
         if self.shuffle and (index == 0):
             self.epoch_indices = np.random.permutation(self.epoch_indices)
-            print(self.epoch_indices)
         sample_index = index * self.batch_size
         cur_indices = self.epoch_indices[sample_index:sample_index + self.batch_size]
         images = self.images[cur_indices]
