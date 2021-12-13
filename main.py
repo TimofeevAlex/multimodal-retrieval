@@ -293,6 +293,8 @@ def main() -> None:
     parser.add_argument("--EMBEDDING_SIZE", type=int, default=128)
     parser.add_argument("--SCHEDULER", type=str, default='MultiStep')
     parser.add_argument("--OPTIMIZER", type=str, default='Adam')
+    parser.add_argument("--RESTART", type=str2bool, default=False)
+
 
     options = parser.parse_args()
 
@@ -338,6 +340,16 @@ def main() -> None:
             + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{options.OPTIMIZER}_{now}"
         )
         writer = SummaryWriter(osp.join(log_dir, exp_name))
+        if options.RESTART:
+            assert options.CV_DIR != ""
+            assert options.TEXT_DIR != ""
+            image_embedder, text_embedder = read_embedders(
+                options.CV_DIR,
+                options.TEXT_DIR,
+                options.TRAINABLE_CV,
+                options.TRAINABLE_TEXT,
+                options.EMBEDDING_SIZE
+            )
         image_embedder, text_embedder = run_train(
             options.DATA_DIRECTORY,
             options.MAX_LEN,
