@@ -28,16 +28,15 @@ device = "cuda" if cuda.is_available() else "cpu"
 def adjust_learning_rate(optimizer, epoch, init_lr):
     epoch = epoch + 1
     if epoch <= 5:
-        lr = init_lr * epoch / 5
-    # elif epoch > 180:
-    #     lr = init_lr * 0.0001
-    # elif epoch > 160:
-    #     lr = init_lr * 0.01
+        lr = init_lr - (6 - epoch) * 0.00018 
+    elif epoch > 90:
+        lr = init_lr * 0.01
+    elif epoch > 30:
+        lr = init_lr * 0.1
     else:
         lr = init_lr
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-
 
 def run_train(
     DATA_DIRECTORY,
@@ -52,7 +51,8 @@ def run_train(
     TRAINABLE_TEXT,
     writer,
     EMBEDDING_SIZE,
-    SCHEDULER
+    SCHEDULER,
+    OPTIMIZER
 ):
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
@@ -61,6 +61,12 @@ def run_train(
         root=osp.join(DATA_DIRECTORY, "train2014"),
         annFile=osp.join(DATA_DIRECTORY, annot_train),
         transform=loader.get_transform("train"),
+    )
+    annot_val = osp.join("annotations", "captions_val2014.json")
+    tr_dataset_ext = dset.CocoCaptions(
+        root=osp.join(DATA_DIRECTORY, "val2014"), 
+        annFile=osp.join(DATA_DIRECTORY, annot_val), 
+        transform=loader.get_transform("train")
     )
     params = {"batch_size": 1, "shuffle": True}
     len_ = len(tr_dataset)
@@ -72,6 +78,7 @@ def run_train(
         MAX_LEN,
         BATCH_SIZE,
         indices=indices,
+        dataset_ext=tr_dataset_ext,
         sample_pos=True,
         shuffle=True,
     )
@@ -116,12 +123,20 @@ def run_train(
     params = list(filter(lambda p: p.requires_grad, image_embedder.parameters()))
     params += list(filter(lambda p: p.requires_grad, text_embedder.parameters()))
 
-    optimizer = torch.optim.Adam(
-        params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
-    )
+    if OPTIMIZER == 'Adam':
+        optimizer = torch.optim.Adam(
+            params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+        )
+    elif OPTIMIZER == 'SGD':
+        optimizer = torch.optim.SGD(
+            params=params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY, momentum=0.9
+        )
+    else:
+        raise ValueError('Only Adam or SGD optimizers are acceptable')
+        
     
     if SCHEDULER == 'MultiStep':
-        scheduler = MultiStepLR(optimizer, milestones=[100], gamma=0.1)
+        scheduler = MultiStepLR(optimizer, milestones=[1, 4], gamma=0.1)
     elif SCHEDULER == 'CosineAnnealing':
         scheduler = CosineAnnealingLR(optimizer, len(train_loader))
     elif SCHEDULER == 'GradualWarmup':
@@ -134,7 +149,7 @@ def run_train(
     models_dir = osp.join(
         OUTPUT_DIRECTORY,
         f"{LOSS}_{LEARNING_RATE}_{WEIGHT_DECAY}_{EMBEDDING_SIZE}"
-        +f"_{SCHEDULER}_{TRAINABLE_CV}_{TRAINABLE_TEXT}"
+        +f"_{SCHEDULER}_{TRAINABLE_CV}_{TRAINABLE_TEXT}_{OPTIMIZER}"
         + str(datetime.now()).split(".")[0].replace(" ", "_"),
     )
     create_dir(models_dir)
@@ -277,6 +292,7 @@ def main() -> None:
     parser.add_argument("--TRAINABLE_TEXT", type=str, default="all")
     parser.add_argument("--EMBEDDING_SIZE", type=int, default=128)
     parser.add_argument("--SCHEDULER", type=str, default='MultiStep')
+    parser.add_argument("--OPTIMIZER", type=str, default='Adam')
 
     options = parser.parse_args()
 
@@ -319,7 +335,7 @@ def main() -> None:
     if (options.CV_DIR == "") or (options.TEXT_DIR == ""):
         exp_name = (
             f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.SCHEDULER}"
-            + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{now}"
+            + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{options.OPTIMIZER}_{now}"
         )
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = run_train(
@@ -335,12 +351,13 @@ def main() -> None:
             options.TRAINABLE_TEXT,
             writer,
             options.EMBEDDING_SIZE,
-            options.SCHEDULER
+            options.SCHEDULER,
+            options.OPTIMIZER
         )
     else:
         exp_name = (
             f"TEST_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.SCHEDULER}"
-            + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{now}"
+            + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{options.OPTIMIZER}_{now}"
         )
         writer = SummaryWriter(osp.join(log_dir, exp_name))
         image_embedder, text_embedder = read_embedders(

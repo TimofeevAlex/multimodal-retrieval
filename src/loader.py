@@ -15,8 +15,7 @@ def get_transform(split_name):
     )
     t_list = []
     if split_name == "train":
-        t_list = [transforms.RandomResizedCrop(
-            224), transforms.RandomHorizontalFlip()]
+        t_list = [transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip()]
     elif split_name == "val":
         t_list = [transforms.Resize(256), transforms.CenterCrop(224)]
     elif split_name == "test":
@@ -28,21 +27,23 @@ def get_transform(split_name):
 
 
 class ImgCaptSetLoader(Dataset):
-    def __init__(self, dataset, tokenizer, max_len, batch_size=500, num_images=5000, i2t=True):
+    def __init__(
+        self, dataset, tokenizer, max_len, batch_size=500, num_images=5000, i2t=True
+    ):
         assert num_images % batch_size == 0
         assert batch_size % 5 == 0
         self.tokenizer = tokenizer
         self.coco_dataset = dataset
         self.max_len = max_len
         self.c_batch_size = batch_size
-        self.i_batch_size = batch_size // 5 
+        self.i_batch_size = batch_size // 5
         self.num_images = num_images
         self.num_captions = num_images * 5
         self.i2t = i2t
         # Prepare dataset
         self.images = []
         self.captions = []
-        print('Dataset loading')
+        print("Dataset loading")
         for i, (img, cap) in tqdm(enumerate(dataset)):
             if i == num_images:
                 break
@@ -50,7 +51,10 @@ class ImgCaptSetLoader(Dataset):
             self.captions.extend(cap[:5])
 
     def __len__(self):
-        return math.ceil((self.num_captions / self.c_batch_size) * (self.num_images / self.i_batch_size)) 
+        return math.ceil(
+            (self.num_captions / self.c_batch_size)
+            * (self.num_images / self.i_batch_size)
+        )
 
     def __getitem__(self, index):
         # Prepare indices
@@ -63,8 +67,8 @@ class ImgCaptSetLoader(Dataset):
             caption_index = (image_index // self.num_images) * self.c_batch_size
             image_index = image_index % self.num_images
         # Get this batch of images
-        images = self.images[image_index:image_index + self.i_batch_size]
-        captions = self.captions[caption_index:caption_index + self.c_batch_size]
+        images = self.images[image_index : image_index + self.i_batch_size]
+        captions = self.captions[caption_index : caption_index + self.c_batch_size]
         # Processing captions
         inputs = self.tokenizer.batch_encode_plus(
             captions,
@@ -73,20 +77,30 @@ class ImgCaptSetLoader(Dataset):
             padding="max_length",
             truncation=True,
             return_attention_mask=True,
-            return_token_type_ids=False
+            return_token_type_ids=False,
         )
         ids = inputs["input_ids"]
         mask = inputs["attention_mask"]
-        
+
         return {
             "ids": torch.tensor(ids, dtype=torch.long),
             "mask": torch.tensor(mask, dtype=torch.long),
-            "image": torch.tensor(torch.stack(images), dtype=torch.float)
+            "image": torch.tensor(torch.stack(images), dtype=torch.float),
         }
 
 
 class ImgCaptLoader(Dataset):
-    def __init__(self, dataset, tokenizer, max_len, batch_size, indices=None, sample_pos=False, shuffle=False):
+    def __init__(
+        self,
+        dataset,
+        tokenizer,
+        max_len,
+        batch_size,
+        indices=None,
+        dataset_ext=None,
+        sample_pos=False,
+        shuffle=False,
+    ):
         self.tokenizer = tokenizer
         # self.coco_dataset = np.array(dataset, dtype=object)[indices]
         self.max_len = max_len
@@ -98,26 +112,33 @@ class ImgCaptLoader(Dataset):
             self.indices = indices
         self.num_samples = len(self.indices)
         self.sample_pos = sample_pos
-        
+
         self.images = []
         self.captions = []
-        print('Dataset loading')
+        print("Dataset loading")
         for i in tqdm(self.indices):
             img, cap = dataset[i]
             self.images.append(np.array(img))
             self.captions.append(cap[:5])
-        self.images = np.array(self.images) 
-        self.captions = np.array(self.captions) 
-        self.epoch_indices = np.arange(self.num_samples)    
-           
+        if dataset_ext != None:
+            ext_len = len(dataset_ext)
+            self.num_samples += ext_len - 5000
+            for i in tqdm(np.arange(5000, ext_len)):
+                img, cap = dataset_ext[i]
+                self.images.append(np.array(img))
+                self.captions.append(cap[:5])
+        self.images = np.array(self.images)
+        self.captions = np.array(self.captions)
+        self.epoch_indices = np.arange(self.num_samples)
+
     def __len__(self):
         return math.ceil(self.num_samples / self.batch_size)
 
-    def __getitem__(self, index): 
+    def __getitem__(self, index):
         if self.shuffle and (index == 0):
             self.epoch_indices = np.random.permutation(self.epoch_indices)
         sample_index = index * self.batch_size
-        cur_indices = self.epoch_indices[sample_index:sample_index + self.batch_size]
+        cur_indices = self.epoch_indices[sample_index : sample_index + self.batch_size]
         images = self.images[cur_indices]
         if self.sample_pos:
             pos_samples = np.random.randint(0, 5, len(cur_indices))
@@ -132,24 +153,25 @@ class ImgCaptLoader(Dataset):
             padding="max_length",
             truncation=True,
             return_attention_mask=True,
-            return_token_type_ids=False
+            return_token_type_ids=False,
         )
         ids = inputs["input_ids"]
         mask = inputs["attention_mask"]
-        
+
         return {
             "ids": torch.tensor(ids, dtype=torch.long),
             "mask": torch.tensor(mask, dtype=torch.long),
-            "image": torch.tensor(images, dtype=torch.float)
+            "image": torch.tensor(images, dtype=torch.float),
         }
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import os.path as osp
     import torchvision.datasets as dset
     from transformers import DistilBertTokenizerFast
     from torch.utils.data import DataLoader
-    DATA_DIRECTORY = 'dataset'
+
+    DATA_DIRECTORY = "dataset"
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
     # Define train loader
