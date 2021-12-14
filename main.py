@@ -136,7 +136,7 @@ def run_train(
         
     
     if SCHEDULER == 'MultiStep':
-        scheduler = MultiStepLR(optimizer, milestones=[1, 4], gamma=0.1)
+        scheduler = MultiStepLR(optimizer, milestones=[1, 4, 10], gamma=0.5)
     elif SCHEDULER == 'CosineAnnealing':
         scheduler = CosineAnnealingLR(optimizer, len(train_loader))
     elif SCHEDULER == 'GradualWarmup':
@@ -334,7 +334,7 @@ def main() -> None:
     log_dir = "logs"
     create_dir(log_dir)
     # Run training or load models for testing
-    if (options.CV_DIR == "") or (options.TEXT_DIR == ""):
+    if ((options.CV_DIR == "") and (options.TEXT_DIR == "")) or options.RESTART:
         exp_name = (
             f"TRAIN_{options.LOSS}_{options.EPOCHS}_{options.LEARNING_RATE}_{options.SCHEDULER}"
             + f"_{options.WEIGHT_DECAY}_{options.BATCH_SIZE}_{options.EMBEDDING_SIZE}_{options.OPTIMIZER}_{now}"
