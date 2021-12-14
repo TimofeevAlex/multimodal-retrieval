@@ -52,7 +52,9 @@ def run_train(
     writer,
     EMBEDDING_SIZE,
     SCHEDULER,
-    OPTIMIZER
+    OPTIMIZER,
+    image_embedder=None,
+    text_embedder=None
 ):
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     annot_train = osp.join("annotations", "captions_train2014.json")
@@ -101,12 +103,14 @@ def run_train(
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    text_embedder = model.DistilBERT(
-        finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE
-    ).to(device)
-    image_embedder = model.ResNet(
-        finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE
-    ).to(device)
+    if text_embedder != None:
+        text_embedder = model.DistilBERT(
+            finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE
+        ).to(device)
+    if image_embedder != None:
+        image_embedder = model.ResNet(
+            finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE
+        ).to(device)
 
     # Define loss function
     if LOSS == "triplet":
@@ -350,6 +354,8 @@ def main() -> None:
                 options.TRAINABLE_TEXT,
                 options.EMBEDDING_SIZE
             )
+        else:
+            image_embedder, text_embedder = None, None
         image_embedder, text_embedder = run_train(
             options.DATA_DIRECTORY,
             options.MAX_LEN,
@@ -364,7 +370,9 @@ def main() -> None:
             writer,
             options.EMBEDDING_SIZE,
             options.SCHEDULER,
-            options.OPTIMIZER
+            options.OPTIMIZER,
+            image_embedder, 
+            text_embedder
         )
     else:
         exp_name = (
