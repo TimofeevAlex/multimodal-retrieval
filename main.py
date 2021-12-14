@@ -103,11 +103,11 @@ def run_train(
     val_loader = DataLoader(val_dataset, **params)
 
     # Initialize models
-    if text_embedder != None:
+    if text_embedder == None:
         text_embedder = model.DistilBERT(
             finetune=TRAINABLE_TEXT, embedding_size=EMBEDDING_SIZE
         ).to(device)
-    if image_embedder != None:
+    if image_embedder == None:
         image_embedder = model.ResNet(
             finetune=TRAINABLE_CV, embedding_size=EMBEDDING_SIZE
         ).to(device)
@@ -140,7 +140,7 @@ def run_train(
         
     
     if SCHEDULER == 'MultiStep':
-        scheduler = MultiStepLR(optimizer, milestones=[1, 4, 10], gamma=0.5)
+        scheduler = MultiStepLR(optimizer, milestones=[1], gamma=0.1)
     elif SCHEDULER == 'CosineAnnealing':
         scheduler = CosineAnnealingLR(optimizer, len(train_loader))
     elif SCHEDULER == 'GradualWarmup':
