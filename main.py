@@ -115,7 +115,7 @@ def run_train(
     # Define loss function
     if LOSS == "triplet":
         loss_fn = loss.HingeTripletRankingLoss(
-            margin=0.2, device=device, mining_negatives="max"
+            margin=0.2, device=device, mining_negatives='sum'#"max"
         ).to(device)
     elif LOSS == "SimCLR":
         loss_fn = loss.SimCLRLoss(temp=0.07, device=device).to(device)
@@ -140,7 +140,7 @@ def run_train(
         
     
     if SCHEDULER == 'MultiStep':
-        scheduler = MultiStepLR(optimizer, milestones=[1, 4, 8], gamma=0.5)
+        scheduler = MultiStepLR(optimizer, milestones=[100], gamma=0.5)
     elif SCHEDULER == 'CosineAnnealing':
         scheduler = CosineAnnealingLR(optimizer, len(train_loader))
     elif SCHEDULER == 'GradualWarmup':
@@ -161,6 +161,7 @@ def run_train(
     print("Start training")
     best_epoch = 0
     best_val_loss = int(sys.maxsize)
+    early_stop = 0
     for epoch in range(EPOCHS):
         if SCHEDULER == 'GradualWarmup':
             adjust_learning_rate(optimizer, epoch, LEARNING_RATE)
@@ -191,6 +192,7 @@ def run_train(
         if SCHEDULER != 'GradualWarmup':
             scheduler.step()
         if loss_val <= best_val_loss:
+            early_stop = 0
             best_val_loss = loss_val
             best_epoch = epoch
         # Save the model
@@ -202,6 +204,10 @@ def run_train(
             image_embedder.state_dict(),
             osp.join(models_dir, f"image_embedder_{epoch}"),
         )
+        if early_stop == 6:
+            break
+        else:
+            early_stop += 1
     # Upload the best model weights
     best_text_model_path = osp.join(models_dir, f"text_embedder_{best_epoch}")
     best_image_model_path = osp.join(models_dir, f"image_embedder_{best_epoch}")
