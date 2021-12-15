@@ -72,7 +72,7 @@ def run_train(
     )
     params = {"batch_size": 1, "shuffle": True}
     len_ = len(tr_dataset)
-    train_size = len_ - 5000
+    train_size =  len_ - 5000
     indices = torch.arange(train_size)
     train_dataset = loader.ImgCaptLoader(
         tr_dataset,
@@ -120,7 +120,7 @@ def run_train(
     elif LOSS == "SimCLR":
         loss_fn = loss.SimCLRLoss(temp=0.07, device=device).to(device)
     elif LOSS == "BarlowTwins":
-        loss_fn = loss.BarlowTwins(embedding_size=EMBEDDING_SIZE)
+        loss_fn = loss.BarlowTwins(embedding_size=EMBEDDING_SIZE).to(device)
     else:
         raise ValueError("Loss can be triplet/SimCLR")
 
@@ -140,7 +140,7 @@ def run_train(
         
     
     if SCHEDULER == 'MultiStep':
-        scheduler = MultiStepLR(optimizer, milestones=[1], gamma=0.1)
+        scheduler = MultiStepLR(optimizer, milestones=[1, 4, 8], gamma=0.5)
     elif SCHEDULER == 'CosineAnnealing':
         scheduler = CosineAnnealingLR(optimizer, len(train_loader))
     elif SCHEDULER == 'GradualWarmup':
@@ -284,7 +284,7 @@ def main() -> None:
     parser.add_argument("--DOWNLOAD", type=str2bool, default=False)
     parser.add_argument("--DATA_DIRECTORY", type=str, default="dataset")
     parser.add_argument("--MAX_LEN", type=int, default=32)
-    parser.add_argument("--EPOCHS", type=int, default=60)
+    parser.add_argument("--EPOCHS", type=int, default=30)
     parser.add_argument("--LEARNING_RATE", type=float, default=2e-4)
     parser.add_argument("--WEIGHT_DECAY", type=float, default=5e-6)
     parser.add_argument("--BATCH_SIZE", type=int, default=256)
